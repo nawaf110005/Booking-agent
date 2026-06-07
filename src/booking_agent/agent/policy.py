@@ -1,0 +1,495 @@
+"""The booking agent's orchestrator: one turn in, one structured reply out.
+
+A deterministic state machine over the F001 tools. It advances as far as the
+user's message allows and asks for the first missing slot. The payment URL is
+issued ONLY after an explicit confirm from AWAITING_CONFIRMATION — the
+non-negotiable HITL gate (Constitution I).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from booking_agent.agent import state as S
+from booking_agent.agent.answer import answer_question
+from booking_agent.agent.extract import heuristic_extract
+from booking_agent.agent.llm import llm_available, llm_extract
+from booking_agent.agent.state import ConversationState
+from booking_agent.db.base import ensure_aware, utcnow
+from booking_agent.db.enums import BookingStatus, Category, MemberTier, SeatStatus
+from booking_agent.db.models import Booking, Seat
+from booking_agent.temporal import when_label, when_range
+from booking_agent.tools.booking import create_booking_from_hold
+from booking_agent.tools.errors import CapExceededError, SeatUnavailableError, ToolError
+from booking_agent.tools.events import get_event_details, search_events
+from booking_agent.tools.holds import place_seat_hold, release_seat_hold
+from booking_agent.tools.members import lookup_member_by_email
+from booking_agent.tools.money import sar_str
+from booking_agent.tools.pricing import compute_quote, get_categories_with_pricing
+
+GREETING_TEXT = (
+    "Hi! I'm your booking assistant 🎫\n"
+    "Tell me what you'd like to see — e.g. \"Coldplay in Riyadh\" — or pick one below."
+)
+
+
+# --------------------------------------------------------------------------- #
+# Reply + payload builders
+# --------------------------------------------------------------------------- #
+
+def _reply(state: ConversationState, text: str, *, suggestions: list[str] | None = None, **extra) -> dict:
+    state.record("agent", text)
+    payload = {
+        "session_id": state.session_id,
+        "reply": text,
+        "step": state.step,
+        "suggestions": suggestions or [],
+        "events": None,
+        "member": None,
+        "categories": None,
+        "quote": None,
+        "seatmap_url": None,
+        "hold": None,
+        "confirmation": None,
+        "payment": None,
+    }
+    payload.update(extra)
+    return payload
+
+
+def _fmt_dt(dt: datetime) -> str:
+    return dt.strftime("%a %d %b %Y, %H:%M")
+
+
+def _price_from(db: Session, event_id: int) -> str:
+    cents = db.execute(
+        select(func.min(Seat.base_price)).where(Seat.event_id == event_id)
+    ).scalar_one_or_none()
+    return sar_str(int(cents)) if cents is not None else "—"
+
+
+def _event_cards(db: Session, events) -> list[dict]:
+    return [
+        {
+            "id": e.id,
+            "title": e.title,
+            "venue": e.venue,
+            "city": e.city,
+            "starts_at": e.starts_at.isoformat(),
+            "price_from_sar": _price_from(db, e.id),
+        }
+        for e in events
+    ]
+
+
+def _member_obj(member) -> dict:
+    if member.is_member:
+        label = f"{member.tier.value.title()} member · {member.discount_label} off · up to {member.ticket_cap}"
+    else:
+        label = "Guest · standard pricing · up to 4 tickets"
+    return {
+        "tier": member.tier.value if member.tier else None,
+        "discount_label": member.discount_label,
+        "ticket_cap": member.ticket_cap,
+        "is_member": member.is_member,
+        "label": label,
+    }
+
+
+def _categories_payload(db: Session, event_id: int, tier: MemberTier | None) -> list[dict]:
+    out = []
+    for c in get_categories_with_pricing(db, event_id, tier):
+        out.append(
+            {
+                "category": c.category.value,
+                "base_sar": c.base_sar,
+                "discounted_sar": c.discounted_sar,
+                "available": c.available,
+            }
+        )
+    return out
+
+
+def _quote_payload(quote) -> dict:
+    return {
+        "category": quote.category.value,
+        "quantity": quote.quantity,
+        "lines": quote.summary_lines(),
+        "total_sar": sar_str(quote.total, quote.currency),
+    }
+
+
+def _seatmap_url(state: ConversationState) -> str:
+    bust = state.hold_token or state.turn
+    return f"/v1/events/{state.event_id}/seatmap.png?category={state.category}&v={bust}"
+
+
+def _tier_enum(state: ConversationState) -> MemberTier | None:
+    return MemberTier(state.tier) if state.tier else None
+
+
+def _available_seats(db: Session, event_id: int, category: str, n: int = 6) -> list[str]:
+    return list(
+        db.execute(
+            select(Seat.seat_id)
+            .where(
+                Seat.event_id == event_id,
+                Seat.category == Category(category),
+                Seat.status == SeatStatus.AVAILABLE,
+            )
+            .order_by(Seat.row, Seat.number)
+            .limit(n)
+        ).scalars().all()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Main turn handler
+# --------------------------------------------------------------------------- #
+
+def respond(db: Session, state: ConversationState, message: str) -> dict:
+    state.turn += 1
+    state.record("user", message)
+
+    params = heuristic_extract(message, state.step)
+    heuristic_intent = params.intent
+    if llm_available():
+        llm_params = llm_extract(message)
+        if llm_params is not None:
+            params = params.merge(llm_params)
+    # The heuristic's strong intents (ask/cancel/confirm) are reliable signals;
+    # don't let the LLM's classification downgrade a question into a booking turn.
+    if heuristic_intent in ("ask", "cancel", "confirm"):
+        params.intent = heuristic_intent
+
+    # --- Cancel: release any hold and step back to seat selection ---------- #
+    if params.intent == "cancel" and state.step in (S.AWAITING_CONFIRMATION, S.SEAT_SELECTION, S.PAYMENT):
+        if state.hold_token:
+            release_seat_hold(db, state.hold_token)
+        state.hold_token = state.hold_expires = None
+        state.seat_ids = []
+        state.booking_id = None
+        state.step = S.SEAT_SELECTION
+        return _reply(
+            state,
+            "No problem — I released those seats. Pick different seats, or say 'cancel' again to start over.",
+            seatmap_url=_seatmap_url(state),
+            suggestions=_available_seats(db, state.event_id, state.category, 4) if state.event_id and state.category else [],
+        )
+
+    # --- Platform Q&A — answer questions without derailing the booking flow. #
+    if params.intent == "ask" and not (
+        params.category or params.seat_ids or params.quantity or params.event_id
+    ):
+        suggestions = (
+            ["What's on this weekend?", "Is there a discount?", "Coldplay in Riyadh"]
+            if state.event_id is None
+            else ["Pick my seats", "How many can I book?", "cancel"]
+        )
+        return _reply(state, answer_question(db, message, state.event_id), suggestions=suggestions)
+
+    # --- Post-completion: a finished booking can start over or just chat. -- #
+    if state.step == S.CONFIRMED:
+        low = message.lower()
+        wants_new = bool(
+            params.event_id or params.event_query or params.when
+            or params.intent == "browse" or "book" in low or "another" in low
+        )
+        if wants_new:
+            kept_email = state.email
+            state.event_id = state.category = state.quantity = None
+            state.seat_ids = []
+            state.hold_token = state.hold_expires = state.booking_id = None
+            state.last_query = None
+            state.step = S.GREETING
+            state.email = kept_email
+            # fall through to resolve the new request
+        else:
+            return _reply(
+                state,
+                "🎫 Enjoy the show! I can book you another event or answer questions — just ask.",
+                suggestions=["What's on this weekend?", "Book another event", "Is there a discount?"],
+            )
+
+    # --- Discovery / browse the catalog (optionally filtered by time) ------ #
+    if state.event_id is None and params.intent == "browse":
+        state.step = S.EVENT_SELECTION
+        if params.when:
+            rng = when_range(params.when, utcnow()) or (None, None)
+            date_from, date_to = rng
+            results = search_events(
+                db, params.event_query, params.city, date_from=date_from, date_to=date_to
+            )
+            label = when_label(params.when)
+            if results:
+                return _reply(
+                    state,
+                    f"Here's what's on {label} ({date_from:%a %d %b}–{date_to:%a %d %b}):",
+                    events=_event_cards(db, results),
+                    suggestions=[r.title.split(" — ")[0] for r in results[:3]],
+                )
+            if params.event_query:
+                nearest = search_events(db, params.event_query, params.city)
+                if nearest:
+                    return _reply(
+                        state,
+                        f"Nothing matching that {label}. The nearest is "
+                        f"{nearest[0].title} on {nearest[0].starts_at:%a %d %b}:",
+                        events=_event_cards(db, nearest[:3]),
+                        suggestions=[r.title.split(" — ")[0] for r in nearest[:3]],
+                    )
+            return _reply(
+                state,
+                f"I don't have anything {label} — here's what's coming up instead:",
+                events=_event_cards(db, search_events(db)[:6]),
+                suggestions=["Coldplay", "Riyadh Derby", "Soundstorm"],
+            )
+        # Generic browse (no time filter).
+        results = search_events(db, params.event_query, params.city) or search_events(db)
+        return _reply(
+            state,
+            "Here's what's on:",
+            events=_event_cards(db, results[:6]),
+            suggestions=[r.title.split(" — ")[0] for r in results[:3]],
+        )
+
+    # --- 1. Resolve the event -------------------------------------------- #
+    if state.event_id is None:
+        if params.event_id is not None:
+            try:
+                ev = get_event_details(db, params.event_id)
+                state.event_id = ev.id
+            except ToolError:
+                pass
+
+        if state.event_id is None:
+            query = params.event_query or state.last_query
+            browse = params.intent == "browse"
+            if query or browse:
+                results = [] if browse and not query else search_events(db, query or "", params.city)
+                if browse and not query:
+                    results = search_events(db)
+                if query:
+                    state.last_query = query
+                if len(results) == 1:
+                    state.event_id = results[0].id
+                elif len(results) == 0:
+                    catalog = search_events(db)
+                    state.step = S.EVENT_SELECTION
+                    return _reply(
+                        state,
+                        "I couldn't find that one. Here's what's on right now:",
+                        events=_event_cards(db, catalog),
+                        suggestions=["Coldplay", "Riyadh Derby", "Soundstorm"],
+                    )
+                else:
+                    state.step = S.EVENT_SELECTION
+                    cities = sorted({e.city for e in results})
+                    return _reply(
+                        state,
+                        "I found a few matches — which one?",
+                        events=_event_cards(db, results),
+                        suggestions=cities,
+                    )
+
+    if state.event_id is None:
+        # Greeting / discovery.
+        catalog = search_events(db)[:4]
+        state.step = S.EVENT_SELECTION
+        return _reply(
+            state,
+            GREETING_TEXT,
+            events=_event_cards(db, catalog),
+            suggestions=["Coldplay in Riyadh", "Riyadh Derby", "What's on this weekend?"],
+        )
+
+    ev = get_event_details(db, state.event_id)
+
+    # --- 2. Identify the buyer (email -> membership) --------------------- #
+    if params.email:
+        member = lookup_member_by_email(db, params.email)
+        state.email = member.email
+        state.tier = member.tier.value if member.tier else None
+        state.is_member = member.is_member
+        state.ticket_cap = member.ticket_cap
+
+    if not state.email:
+        state.step = S.NEED_EMAIL
+        return _reply(
+            state,
+            f"Great — **{ev.title}** at {ev.venue}, {ev.city} ({_fmt_dt(ev.starts_at)}).\n"
+            "What's your email? I'll check for a member discount.",
+            suggestions=["nawaf@example.com", "guest@example.com"],
+        )
+
+    member = lookup_member_by_email(db, state.email)
+    tier = _tier_enum(state)
+
+    # --- 3. Category ----------------------------------------------------- #
+    if params.category:
+        state.category = params.category
+
+    if not state.category:
+        state.step = S.CATEGORY_SELECTION
+        member_line = (
+            f"You're a **{member.tier.value.title()}** member — {member.discount_label} off, up to {member.ticket_cap} tickets.\n"
+            if member.is_member
+            else "You're booking as a guest (standard pricing, up to 4 tickets).\n"
+        )
+        return _reply(
+            state,
+            member_line + "Which category would you like?",
+            member=_member_obj(member),
+            categories=_categories_payload(db, state.event_id, tier),
+            suggestions=[c.category.value for c in get_categories_with_pricing(db, state.event_id, tier)],
+        )
+
+    # --- 4. Quantity (enforce the tier cap) ------------------------------ #
+    if params.quantity is not None:
+        if params.quantity > state.ticket_cap:
+            state.step = S.NEED_QUANTITY
+            return _reply(
+                state,
+                f"As {'a ' + member.tier.value.title() + ' member' if member.is_member else 'a guest'} you can book up to "
+                f"**{state.ticket_cap}** tickets per booking. How many would you like (max {state.ticket_cap})?",
+                suggestions=[str(n) for n in (2, 4, state.ticket_cap) if n <= state.ticket_cap],
+            )
+        state.quantity = params.quantity
+
+    if not state.quantity:
+        state.step = S.NEED_QUANTITY
+        return _reply(
+            state,
+            f"How many **{state.category.title()}** tickets? (up to {state.ticket_cap})",
+            suggestions=[str(n) for n in dict.fromkeys((2, 4, state.ticket_cap)) if n <= state.ticket_cap],
+        )
+
+    # We now have event + email + category + quantity → quote.
+    try:
+        quote = compute_quote(db, state.event_id, state.category, state.quantity, tier)
+    except CapExceededError as exc:
+        state.quantity = None
+        state.step = S.NEED_QUANTITY
+        return _reply(state, str(exc) + " How many would you like?")
+
+    # --- 5. Seats + atomic hold ----------------------------------------- #
+    if not state.hold_token:
+        if params.seat_ids and len(params.seat_ids) == state.quantity:
+            try:
+                hold = place_seat_hold(db, state.event_id, params.seat_ids, state.email)
+            except (SeatUnavailableError, ToolError) as exc:
+                state.step = S.SEAT_SELECTION
+                return _reply(
+                    state,
+                    f"Sorry — {exc} Please pick {state.quantity} other seat(s).",
+                    quote=_quote_payload(quote),
+                    seatmap_url=_seatmap_url(state),
+                    suggestions=_available_seats(db, state.event_id, state.category, 4),
+                )
+            state.seat_ids = list(hold.seat_ids)
+            state.hold_token = hold.token
+            state.hold_expires = hold.expires_at.isoformat()
+            state.step = S.AWAITING_CONFIRMATION
+            return _confirmation_reply(db, state, ev, quote)
+
+        # Need seats: show the map.
+        if params.seat_ids and len(params.seat_ids) != state.quantity:
+            note = f"Please pick exactly **{state.quantity}** seat(s) — you gave {len(params.seat_ids)}.\n"
+        else:
+            note = ""
+        state.step = S.SEAT_SELECTION
+        return _reply(
+            state,
+            note
+            + f"Here's the **{state.category.title()}** seat map. Type {state.quantity} seat ID(s) like "
+            + ", ".join(_available_seats(db, state.event_id, state.category, state.quantity) or ["G3"])
+            + ".",
+            quote=_quote_payload(quote),
+            seatmap_url=_seatmap_url(state),
+            suggestions=[", ".join(_available_seats(db, state.event_id, state.category, state.quantity))]
+            if _available_seats(db, state.event_id, state.category, state.quantity)
+            else [],
+        )
+
+    # --- 6. HITL confirmation ------------------------------------------- #
+    if state.step == S.AWAITING_CONFIRMATION:
+        # Has the hold expired?
+        if state.hold_expires and ensure_aware(datetime.fromisoformat(state.hold_expires)) <= utcnow():
+            state.hold_token = state.hold_expires = None
+            state.seat_ids = []
+            state.step = S.SEAT_SELECTION
+            return _reply(
+                state,
+                "⏰ Your 10-minute hold expired. Let's pick seats again.",
+                seatmap_url=_seatmap_url(state),
+                suggestions=_available_seats(db, state.event_id, state.category, state.quantity),
+            )
+
+        if params.intent == "confirm":
+            booking = create_booking_from_hold(
+                db,
+                email=state.email,
+                event_id=state.event_id,
+                category=state.category,
+                quantity=state.quantity,
+                seat_ids=state.seat_ids,
+                hold_token=state.hold_token,
+                tier=tier,
+            )
+            state.booking_id = booking.id
+            state.step = S.PAYMENT
+            return _reply(
+                state,
+                "Confirmed! ✅ Complete your payment to get your ticket.",
+                payment={"booking_id": booking.id, "total_sar": sar_str(booking.total, booking.currency)},
+            )
+
+        # Re-show the summary until they confirm.
+        return _confirmation_reply(db, state, ev, quote)
+
+    # --- 7. Payment pending / completed --------------------------------- #
+    if state.step == S.PAYMENT and state.booking_id:
+        booking = db.get(Booking, state.booking_id)
+        if booking is not None and booking.status == BookingStatus.PAID:
+            state.step = S.CONFIRMED
+            return _reply(
+                state,
+                f"You're all set — your booking for {ev.title} is paid and your ticket "
+                "is issued 🎫. Want to book anything else?",
+                suggestions=["What's on this weekend?", "Book another event"],
+            )
+        return _reply(
+            state,
+            "Tap **Pay now** to complete your booking (sandbox).",
+            payment={"booking_id": state.booking_id, "total_sar": sar_str(quote.total, quote.currency)},
+        )
+
+    # Fallback (shouldn't normally hit).
+    return _reply(state, "Could you rephrase that?")
+
+
+def _confirmation_reply(db: Session, state: ConversationState, ev, quote) -> dict:
+    return _reply(
+        state,
+        "Please review and confirm before payment:",
+        quote=_quote_payload(quote),
+        hold={
+            "seat_ids": state.seat_ids,
+            "expires_at": state.hold_expires,
+            "ttl_minutes": 10,
+        },
+        confirmation={
+            "event_title": ev.title,
+            "when": _fmt_dt(ev.starts_at),
+            "venue": f"{ev.venue}, {ev.city}",
+            "seats": state.seat_ids,
+            "subtotal_sar": sar_str(quote.net_subtotal, quote.currency),
+            "vat_sar": sar_str(quote.vat, quote.currency),
+            "total_sar": sar_str(quote.total, quote.currency),
+            "expires_at": state.hold_expires,
+        },
+        suggestions=["confirm", "cancel"],
+    )
