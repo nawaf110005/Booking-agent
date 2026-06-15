@@ -27,8 +27,14 @@ class Settings(BaseSettings):
     booking_agent_provider: str = Field(default="anthropic")
     booking_agent_model: str = Field(default="claude-sonnet-4-6")
     # When true (and a key is set), reply prose is rephrased by the LLM per turn
-    # — warmer/varied wording, identical facts. Off = deterministic templates.
-    booking_agent_dynamic_replies: bool = Field(default=False)
+    # — warmer/varied wording, identical facts. On by default so the chat reads
+    # naturally; set false for fixed, deterministic templates.
+    booking_agent_dynamic_replies: bool = Field(default=True)
+    # Agent architecture: "fsm" (deterministic MVP) | "tool_agent" (LLM tool-calling).
+    booking_agent_mode: str = Field(default="fsm")
+    # Hard cap (seconds) on any single LLM call, so a slow/unreachable provider
+    # fails fast and the agent falls back instead of hanging.
+    llm_timeout_seconds: float = Field(default=20.0)
 
     # Booking rules
     hold_ttl_minutes: int = Field(default=10)

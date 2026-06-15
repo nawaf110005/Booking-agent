@@ -61,7 +61,8 @@ def chat_complete(system: str, user: str, max_tokens: int = 600) -> str:
     if provider == "anthropic":
         import anthropic  # deferred
 
-        client = anthropic.Anthropic(api_key=settings.active_llm_key)
+        client = anthropic.Anthropic(api_key=settings.active_llm_key,
+                                     timeout=settings.llm_timeout_seconds)
         resp = client.messages.create(
             model=settings.booking_agent_model,
             max_tokens=max_tokens,
@@ -73,7 +74,8 @@ def chat_complete(system: str, user: str, max_tokens: int = 600) -> str:
     from openai import OpenAI  # deferred
 
     base_url = NANOGPT_BASE_URL if provider in {"nanogpt", "nano-gpt", "nano_gpt"} else None
-    client = OpenAI(api_key=settings.active_llm_key, base_url=base_url)
+    client = OpenAI(api_key=settings.active_llm_key, base_url=base_url,
+                    timeout=settings.llm_timeout_seconds)
     resp = client.chat.completions.create(
         model=settings.booking_agent_model,
         messages=[

@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from booking_agent.agent.llm import chat_complete, llm_available
+from booking_agent.agent.rag import retrieve
 from booking_agent.db.models import Seat
 from booking_agent.tools.events import get_event_details, search_events
 from booking_agent.tools.money import sar_str
@@ -46,21 +47,26 @@ PAYMENT = (
 LANGUAGES = "You can chat in Arabic or English."
 
 _ANSWER_SYSTEM = (
-    "You are Tazkara's friendly booking concierge. Answer the user's question "
-    "using ONLY the facts and live catalog provided. Be concise (1-4 sentences), "
-    "warm and specific. "
-    "Questions about Tazkara itself — what it is, WHO BUILT IT, how it works, "
-    "membership/discounts, prices, VAT, payment, and policies — ARE on-topic; "
-    "answer them from the facts. "
-    "If they ask about events by type or time (e.g. football this week, concerts), "
-    "name the most relevant/closest event(s) from the catalog with their date and "
-    "offer to book. "
-    "When they ask about 'this event' / 'it' / 'the show' and a current event is "
-    "provided below, DESCRIBE it from its title, date, venue, description and price — "
-    "never say you lack details when they are given. "
-    "Only if the question is clearly unrelated to events, tickets, or Tazkara "
-    "(e.g. weather, math, trivia) should you politely say you can only help with "
-    "events and tickets here. Never invent events, prices, or policies."
+    "You are Tazkara, a warm, witty event-ticketing concierge for live events in "
+    "Saudi Arabia. Talk like a helpful friend, not a form: greet back, make a little "
+    "small talk, give honest opinions and recommendations when asked (e.g. which seat "
+    "category is best value, what's fun this weekend), and answer questions about "
+    "events, prices, membership, payment, and how booking works — using ONLY the facts "
+    "and live catalog provided. "
+    "PERSONALISE: if the CONTEXT below gives the user's name or membership tier, use "
+    "them naturally (e.g. 'Sure, Nawaf —'). "
+    "Be concise (1-3 sentences), friendly and specific. You're in the middle of helping "
+    "them book: after you answer, gently nudge toward the next step shown in CONTEXT "
+    "(share an email, pick a category, choose seats, confirm) — invite, don't pester. "
+    "When they ask about 'this event' / 'it' / 'the show' and a current event is provided, "
+    "describe it from its title, date, venue, description and price — never say you lack "
+    "details that are given. "
+    "If they ask you to do something outside ticketing — write code, do homework, "
+    "general tasks — tell them clearly and kindly that that isn't something you can do "
+    "(you're a ticket-booking concierge), then offer to help them find an event. NEVER "
+    "ignore the request or reply with a generic greeting. For light off-topic chat "
+    "(weather, a joke), answer briefly and warmly, then steer back to tickets. Never "
+    "invent events, prices, seats, or policies — if you don't have it, say so plainly."
 )
 
 
@@ -97,11 +103,22 @@ def _event_detail(db: Session, event_id: int) -> str | None:
     return "\n".join(parts)
 
 
-def answer_question(db: Session, message: str, current_event_id: int | None = None) -> str:
-    """Grounded answer to a platform question (LLM if available, else rules).
+def _context_block(ctx: dict) -> str:
+    return (
+        f"User name: {ctx.get('name') or 'unknown yet'}\n"
+        f"Membership: {ctx.get('tier_label') or 'not identified yet'}\n"
+        f"Current booking step: {ctx.get('step') or 'just starting'}\n"
+        f"Next thing to get from them: {ctx.get('needs') or 'help them pick an event'}"
+    )
 
-    `current_event_id` is the event in the active booking, so "this event"/"it"
-    resolve correctly.
+
+def answer_question(db: Session, message: str, current_event_id: int | None = None,
+                    context: dict | None = None) -> str:
+    """Conversational, personalised reply (LLM if available, else rules).
+
+    `current_event_id` resolves "this event"/"it"; `context` carries the user's
+    name, tier, current step and what's needed next so the reply is personal and
+    nudges the booking forward.
     """
 
     current = _event_detail(db, current_event_id) if current_event_id else None
@@ -113,7 +130,12 @@ def answer_question(db: Session, message: str, current_event_id: int | None = No
                     "\n\nThe user is currently looking at THIS event (so 'this event', "
                     "'it', 'the show' refer to it):\n" + current
                 )
-            reply = chat_complete(_ANSWER_SYSTEM, prompt + f"\n\nUser question: {message}")
+            if context:
+                prompt += "\n\nCONTEXT (use to personalise + steer):\n" + _context_block(context)
+            kb = retrieve(message, k=2)
+            if kb:
+                prompt += "\n\nKnowledge base (use if relevant, don't contradict):\n- " + "\n- ".join(kb)
+            reply = chat_complete(_ANSWER_SYSTEM, prompt + f"\n\nUser message: {message}")
             if reply.strip():
                 return reply.strip()
         except Exception:
@@ -126,6 +148,16 @@ def _rule_based_answer(db: Session, message: str, current: str | None = None) ->
 
     def has(*words: str) -> bool:
         return any(w in low for w in words)
+
+    first = low.strip().split()[0] if low.strip() else ""
+    if first in {"hi", "hey", "hello", "yo", "salam", "hala", "هلا", "اهلا", "مرحبا", "سلام"} or has(
+        "good morning", "good evening", "good afternoon"
+    ):
+        return "Hey! I'm Tazkara 🎫 — I find live events and book tickets. What are you in the mood for?"
+    if has("thank", "thanks", "thx", "شكرا"):
+        return "Anytime! Want to find an event or check your member discount?"
+    if has("how are you", "how r u", "how are u", "how's it going", "what's up", "whats up", "كيفك"):
+        return "Doing great and ready to get you tickets! What would you like to see?"
 
     if current and has(
         "describe", "description", "detail", "about it", "about this", "this event",
@@ -150,6 +182,10 @@ def _rule_based_answer(db: Session, message: str, current: str | None = None) ->
         return LANGUAGES
     if has("match", "matches", "football", "concert", "theatre", "comedy", "festival", "this week", "weekend", "what's on", "whats on", "events"):
         return "Here's what's coming up:\n" + _catalog_brief(db) + "\nWant me to book any of these?"
+    # Venue/FAQ knowledge base (parking, gates, accessibility, prohibited items) — RAG.
+    hits = retrieve(message, k=1, min_overlap=1)
+    if hits:
+        return hits[0]
     return (
         "I'm Tazkara — I can help you find live events and book tickets (with your "
         "member discount, a seat map, and a QR ticket). Try “what's on this weekend?”, "

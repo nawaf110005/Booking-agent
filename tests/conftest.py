@@ -20,6 +20,7 @@ def _force_heuristic(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("booking_agent.agent.policy.llm_available", lambda: False, raising=False)
     monkeypatch.setattr("booking_agent.agent.answer.llm_available", lambda: False, raising=False)
+    monkeypatch.setattr("booking_agent.agent.compose.llm_available", lambda: False, raising=False)
 
 
 @pytest.fixture

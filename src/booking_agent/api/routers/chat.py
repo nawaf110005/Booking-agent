@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from booking_agent.agent import SESSION_STORE, respond
+from booking_agent.agent import SESSION_STORE, handle
+from booking_agent.agent.responses import AgentResponse
 from booking_agent.api.deps import get_db
 
 router = APIRouter()
@@ -24,7 +25,7 @@ def create_session() -> SessionOut:
     return SessionOut(session_id=SESSION_STORE.create().session_id)
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=AgentResponse)
 def chat(body: ChatIn, db: Session = Depends(get_db)) -> dict:
     state = SESSION_STORE.get_or_create(body.session_id)
-    return respond(db, state, body.message)
+    return handle(db, state, body.message)

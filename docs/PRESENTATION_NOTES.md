@@ -16,10 +16,11 @@ the *agent* trustworthy: tested, observable, and safe. This phase closed that ga
 
 | Metric | Before | After |
 |---|---|---|
-| Tests | 83 | **107** (+24, 6 new test files) |
-| AI / LLM path under test | **0%** (mocked out of every test) | extractor, eval set, Q&A, guardrails |
+| Tests | 83 | **115** (+32, 8 new test files) |
+| AI / LLM path under test | **0%** (mocked out of every test) | extractor, eval set, Q&A, guardrails, tool loop |
+| Agent architecture | hardcoded FSM only | FSM **+ opt-in LLM tool-calling mode** |
 | Evaluation set | none | **14 labelled cases** + automated grader |
-| Safety tests (HITL, cap) | none | HITL-bypass + cap + guardrail unit tests |
+| Safety tests (HITL, cap, autonomy) | none | HITL-bypass + cap + "model can't pay" + loop-prevention |
 | Observability | none | tool-call + state-transition log, PII-redacted |
 | LLM provider wired | key-less fallback only | **nano-gpt / Llama** (graceful fallback kept) |
 
@@ -35,14 +36,18 @@ the *agent* trustworthy: tested, observable, and safe. This phase closed that ga
   *parses*; our code *acts*. That's a classic slot-filling dialog system, not a
   tool-calling agent — exactly the difference the course draws in Week 4 (ReAct, tool
   dispatchers).
-- **The fix (this phase) + the honest roadmap.** We kept the state machine as the
-  safety rail (it's what guarantees we never double-charge or skip confirmation) and
-  hardened everything around it. The genuine "make the model drive the tools" refactor
-  (ReAct loop + tool schemas) is scoped and deferred — documented as Tier 2 in the gap
-  analysis so we ship trust first, dynamism next.
-- **Talk-track line.** "We were honest that our agent was deterministic. So we made the
-  deterministic core *provably* safe and observable — and mapped the path to a real
-  tool-calling agent rather than hand-waving it."
+- **The fix — we built a real tool-calling agent mode.** `agent/tool_specs.py` exposes
+  our F001 tools as model-callable function schemas; `agent/tool_agent.py` runs a
+  Reason–Act–Observe loop where the **model** chooses the tool each step and we execute
+  it. Two safety properties make it demo-safe: the payment/booking step is **not** a
+  tool (the model literally cannot trigger a charge — it's handled in code only after an
+  explicit "confirm"), and a step cap prevents infinite loops. It's opt-in
+  (`BOOKING_AGENT_MODE=tool_agent`); the deterministic FSM stays the default so the MVP
+  can't regress. Eight offline tests cover the loop, the autonomy guardrail, and loop
+  prevention.
+- **Talk-track line.** "We didn't just admit our agent was a state machine — we built
+  the agentic version: the model drives the tools in a ReAct loop, but it still can't
+  spend your money, because we kept payment out of its hands and behind a human confirm."
 
 ## Pain point 2 — "Our tests never tested the AI"
 
@@ -101,23 +106,26 @@ the *agent* trustworthy: tested, observable, and safe. This phase closed that ga
 
 ## Live demo script (3 commands)
 
-1. `pytest -q` → **107 passed** (proof it's tested).
+1. `pytest -q` → **115 passed** (proof it's tested).
 2. `python scripts/agent_smoke.py` → a full booking → ticket **and** the observable
    reasoning trace (proof it's observable + safe).
 3. `python scripts/eval_agent.py` → grades the live Llama model on the eval set and
    prints accuracy (proof it's measurable). *(Run on a machine that can reach
    nano-gpt.com.)*
+4. Optional: set `BOOKING_AGENT_MODE=tool_agent` to show the model driving the tools in
+   a ReAct loop — same booking, but the LLM picks each step.
 
 ## How this maps to the course (for Q&A)
 
 - **Week 3** — built-your-first-tool-agent foundations, LLM evals, FastAPI/Streamlit.
-- **Week 4** — tool systems, ReAct, debugging/observability (the deferred dynamism +
-  the observability we shipped).
+- **Week 4** — tool systems, ReAct, tool dispatcher, autonomy guardrails — the new
+  tool-calling mode, plus the observability we shipped.
+- **Week 5** — loop prevention (the step cap in the tool loop).
 - **Week 6** — agent evaluation, guardrails & safety, human-in-the-loop — the core of
   this phase.
 
 ## If asked "what's next?"
 
-The tool-calling/ReAct refactor (let the model choose tools, FSM stays as guardrail),
-an LLM-as-judge scorer for the free-text replies, persisted sentiment per turn, and the
+Promote the tool-agent from opt-in to default once it's graded against the live model;
+an LLM-as-judge scorer for the free-text replies; persisted sentiment per turn; and the
 RAG venue/FAQ feature — all scoped in the gap analysis.

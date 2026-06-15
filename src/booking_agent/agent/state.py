@@ -23,12 +23,15 @@ class ConversationState:
     last_query: str | None = None
     event_id: int | None = None
     email: str | None = None
+    name: str | None = None  # first name, for a personal touch
     tier: str | None = None
     is_member: bool = False
     ticket_cap: int = 4
     category: str | None = None
     quantity: int | None = None
     seat_ids: list[str] = field(default_factory=list)
+    interests: list[str] = field(default_factory=list)  # inferred genres for discovery
+    sentiment: str | None = None  # last-turn sentiment label
     hold_token: str | None = None
     hold_expires: str | None = None  # ISO string
     booking_id: int | None = None

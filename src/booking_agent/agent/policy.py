@@ -8,6 +8,7 @@ non-negotiable HITL gate (Constitution I).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -19,6 +20,11 @@ from booking_agent.agent.extract import heuristic_extract
 from booking_agent.agent.llm import llm_available, llm_extract
 from booking_agent.agent import guardrails, observability
 from booking_agent.agent.compose import compose_reply
+from booking_agent.agent.interests import detect_interest, filter_by_interest
+from booking_agent.agent.profiles import PREFERENCES
+from booking_agent.agent.sentiment import classify_sentiment
+from booking_agent.agent.responses import infer_response_type
+from booking_agent.agent.memory import MEMORY
 from booking_agent.agent.state import ConversationState
 from booking_agent.db.base import ensure_aware, utcnow
 from booking_agent.db.enums import BookingStatus, Category, MemberTier, SeatStatus
@@ -60,6 +66,7 @@ def _reply(state: ConversationState, text: str, *, suggestions: list[str] | None
         "payment": None,
     }
     payload.update(extra)
+    payload["response_type"] = infer_response_type(payload)
     return payload
 
 
@@ -149,6 +156,62 @@ def _available_seats(db: Session, event_id: int, category: str, n: int = 6) -> l
     )
 
 
+def _first_name(email: str | None, fallback: str | None = None) -> str | None:
+    if fallback:
+        return fallback
+    if not email or "@" not in email:
+        return None
+    token = re.split(r"[._\-+0-9]+", email.split("@", 1)[0])[0]
+    return (token[:1].upper() + token[1:].lower()) if token else None
+
+
+def _next_need(state: ConversationState) -> str:
+    if state.event_id is None:
+        return "help them choose an event"
+    if not state.email:
+        return "ask for their email to apply any member discount"
+    if not state.category:
+        return "ask which seat category they'd like"
+    if not state.quantity:
+        return "ask how many tickets"
+    if not state.hold_token:
+        return "ask them to pick seats"
+    if state.step == S.AWAITING_CONFIRMATION:
+        return "ask them to confirm the summary before payment"
+    return "continue the booking"
+
+
+def _step_suggestions(state: ConversationState) -> list[str]:
+    if state.event_id is None:
+        return ["What's on this weekend?", "Coldplay in Riyadh", "Is there a discount?"]
+    if not state.email:
+        return ["nawaf@example.com", "How do discounts work?"]
+    if not state.category:
+        return ["VIP", "Gold", "Silver", "Standing"]
+    if not state.quantity:
+        return [str(n) for n in dict.fromkeys((2, 4, state.ticket_cap)) if n <= state.ticket_cap]
+    if state.step == S.AWAITING_CONFIRMATION:
+        return ["confirm", "cancel"]
+    return ["Pick my seats", "What's the total?", "cancel"]
+
+
+def _context(state: ConversationState) -> dict:
+    if state.is_member and state.tier:
+        tier_label = f"{state.tier.title()} member"
+    elif state.email:
+        tier_label = "guest (standard pricing)"
+    else:
+        tier_label = None
+    return {"name": state.name, "tier_label": tier_label,
+            "step": state.step, "needs": _next_need(state)}
+
+
+def _converse(db: Session, state: ConversationState, message: str) -> dict:
+    """Answer a question / chit-chat at any step (personalised), keeping state."""
+    reply = answer_question(db, message, state.event_id, context=_context(state))
+    return _reply(state, reply, suggestions=_step_suggestions(state))
+
+
 # --------------------------------------------------------------------------- #
 # Main turn handler
 # --------------------------------------------------------------------------- #
@@ -168,9 +231,11 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
     # don't let the LLM's classification downgrade a question into a booking turn.
     if heuristic_intent in ("ask", "cancel", "confirm"):
         params.intent = heuristic_intent
+    state.sentiment = classify_sentiment(message)
     observability.log_tool(
         state.session_id, "nlu_extract", turn=state.turn,
-        intent=params.intent, event_query=params.event_query, used_llm=llm_available(),
+        intent=params.intent, event_query=params.event_query,
+        sentiment=state.sentiment, used_llm=llm_available(),
     )
 
     # --- Cancel: release any hold and step back to seat selection ---------- #
@@ -188,16 +253,10 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             suggestions=_available_seats(db, state.event_id, state.category, 4) if state.event_id and state.category else [],
         )
 
-    # --- Platform Q&A — answer questions without derailing the booking flow. #
-    if params.intent == "ask" and not (
-        params.category or params.seat_ids or params.quantity or params.event_id
-    ):
-        suggestions = (
-            ["What's on this weekend?", "Is there a discount?", "Coldplay in Riyadh"]
-            if state.event_id is None
-            else ["Pick my seats", "How many can I book?", "cancel"]
-        )
-        return _reply(state, answer_question(db, message, state.event_id), suggestions=suggestions)
+    # --- Conversational layer: answer questions / chit-chat at ANY step, then keep
+    #     going. Personalised; broadened to greetings/small talk when the LLM is on. #
+    if params.intent == "ask" or (llm_available() and params.intent in ("greet", "smalltalk")):
+        return _converse(db, state, message)
 
     # --- Post-completion: a finished booking can start over or just chat. -- #
     if state.step == S.CONFIRMED:
@@ -225,11 +284,27 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
     # --- Discovery / browse the catalog (optionally filtered by time) ------ #
     if state.event_id is None and params.intent == "browse":
         state.step = S.EVENT_SELECTION
+        # Learn what they're into (this turn or from their saved profile) and use it.
+        interest = detect_interest(message)
+        if interest and interest not in state.interests:
+            state.interests.append(interest)
+            PREFERENCES.add(state.email, interest)
+        known = state.interests or PREFERENCES.get(state.email)
+        has_filter = bool(params.when or params.city or params.event_query or known)
+        if not has_filter:
+            # Don't dump the whole catalog — find out what they like first.
+            return _reply(
+                state,
+                "Happy to help you find something! What are you into — concerts, sports, "
+                "comedy, or tech conferences? Any city or date in mind?",
+                suggestions=["Concerts", "Sports", "Comedy", "This weekend"],
+            )
         if params.when:
             rng = when_range(params.when, utcnow()) or (None, None)
             date_from, date_to = rng
-            results = search_events(
-                db, params.event_query, params.city, date_from=date_from, date_to=date_to
+            results = filter_by_interest(
+                search_events(db, params.event_query, params.city, date_from=date_from, date_to=date_to),
+                known,
             )
             label = when_label(params.when)
             if results:
@@ -255,11 +330,14 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
                 events=_event_cards(db, search_events(db)[:6]),
                 suggestions=["Coldplay", "Riyadh Derby", "Soundstorm"],
             )
-        # Generic browse (no time filter).
-        results = search_events(db, params.event_query, params.city) or search_events(db)
+        # Filtered by interest / city / query (no time window).
+        results = filter_by_interest(
+            search_events(db, params.event_query, params.city) or search_events(db), known
+        )
+        headline = f"Some {known[0]} picks for you:" if known else "Here's what's on:"
         return _reply(
             state,
-            "Here's what's on:",
+            headline,
             events=_event_cards(db, results[:6]),
             suggestions=[r.title.split(" — ")[0] for r in results[:3]],
         )
@@ -304,7 +382,12 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
                     )
 
     if state.event_id is None:
-        # Greeting / discovery.
+        # With the LLM on, anything we couldn't turn into a booking action — including
+        # off-topic requests like "write me code" — gets a clear, in-character reply
+        # instead of a canned greeting that ignores the user.
+        if llm_available():
+            return _converse(db, state, message)
+        # Offline: greeting / discovery with event cards.
         catalog = search_events(db)[:4]
         state.step = S.EVENT_SELECTION
         return _reply(
@@ -320,6 +403,7 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
     if params.email:
         member = lookup_member_by_email(db, params.email)
         state.email = member.email
+        state.name = _first_name(member.email, state.name)
         state.tier = member.tier.value if member.tier else None
         state.is_member = member.is_member
         state.ticket_cap = member.ticket_cap
@@ -346,10 +430,11 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
 
     if not state.category:
         state.step = S.CATEGORY_SELECTION
+        who = f"{state.name}, you" if state.name else "You"
         member_line = (
-            f"You're a **{member.tier.value.title()}** member — {member.discount_label} off, up to {member.ticket_cap} tickets.\n"
+            f"{who}'re a **{member.tier.value.title()}** member — {member.discount_label} off, up to {member.ticket_cap} tickets.\n"
             if member.is_member
-            else "You're booking as a guest (standard pricing, up to 4 tickets).\n"
+            else f"{who}'re booking as a guest (standard pricing, up to 4 tickets).\n"
         )
         return _reply(
             state,
@@ -463,6 +548,7 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             observability.log_tool(state.session_id, "create_booking", turn=state.turn,
                                    booking_id=booking.id, total_sar=sar_str(booking.total, booking.currency))
             observability.log_transition(state.session_id, entry_step, S.PAYMENT, turn=state.turn)
+            MEMORY.record(state.email, f"{ev.title} — {state.quantity}× {state.category}")
             return _reply(
                 state,
                 "Confirmed! ✅ Complete your payment to get your ticket.",
@@ -489,7 +575,9 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             payment={"booking_id": state.booking_id, "total_sar": sar_str(quote.total, quote.currency)},
         )
 
-    # Fallback (shouldn't normally hit).
+    # Fallback: chat naturally when the LLM is on; else ask them to rephrase.
+    if llm_available():
+        return _converse(db, state, message)
     return _reply(state, "Could you rephrase that?")
 
 
