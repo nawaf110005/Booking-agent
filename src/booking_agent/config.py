@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     nanogpt_api_key: str = ""
     booking_agent_provider: str = Field(default="anthropic")
     booking_agent_model: str = Field(default="claude-sonnet-4-6")
+    # When true (and a key is set), reply prose is rephrased by the LLM per turn
+    # — warmer/varied wording, identical facts. Off = deterministic templates.
+    booking_agent_dynamic_replies: bool = Field(default=False)
 
     # Booking rules
     hold_ttl_minutes: int = Field(default=10)

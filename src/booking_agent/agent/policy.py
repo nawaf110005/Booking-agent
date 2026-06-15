@@ -17,6 +17,8 @@ from booking_agent.agent import state as S
 from booking_agent.agent.answer import answer_question
 from booking_agent.agent.extract import heuristic_extract
 from booking_agent.agent.llm import llm_available, llm_extract
+from booking_agent.agent import guardrails, observability
+from booking_agent.agent.compose import compose_reply
 from booking_agent.agent.state import ConversationState
 from booking_agent.db.base import ensure_aware, utcnow
 from booking_agent.db.enums import BookingStatus, Category, MemberTier, SeatStatus
@@ -41,6 +43,7 @@ GREETING_TEXT = (
 # --------------------------------------------------------------------------- #
 
 def _reply(state: ConversationState, text: str, *, suggestions: list[str] | None = None, **extra) -> dict:
+    text = compose_reply(text)  # warmer wording when dynamic replies are on; else unchanged
     state.record("agent", text)
     payload = {
         "session_id": state.session_id,
@@ -153,6 +156,7 @@ def _available_seats(db: Session, event_id: int, category: str, n: int = 6) -> l
 def respond(db: Session, state: ConversationState, message: str) -> dict:
     state.turn += 1
     state.record("user", message)
+    entry_step = state.step
 
     params = heuristic_extract(message, state.step)
     heuristic_intent = params.intent
@@ -164,6 +168,10 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
     # don't let the LLM's classification downgrade a question into a booking turn.
     if heuristic_intent in ("ask", "cancel", "confirm"):
         params.intent = heuristic_intent
+    observability.log_tool(
+        state.session_id, "nlu_extract", turn=state.turn,
+        intent=params.intent, event_query=params.event_query, used_llm=llm_available(),
+    )
 
     # --- Cancel: release any hold and step back to seat selection ---------- #
     if params.intent == "cancel" and state.step in (S.AWAITING_CONFIRMATION, S.SEAT_SELECTION, S.PAYMENT):
@@ -315,6 +323,10 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
         state.tier = member.tier.value if member.tier else None
         state.is_member = member.is_member
         state.ticket_cap = member.ticket_cap
+        observability.log_tool(
+            state.session_id, "lookup_member", turn=state.turn,
+            email=member.email, tier=state.tier, is_member=member.is_member,
+        )
 
     if not state.email:
         state.step = S.NEED_EMAIL
@@ -349,7 +361,7 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
 
     # --- 4. Quantity (enforce the tier cap) ------------------------------ #
     if params.quantity is not None:
-        if params.quantity > state.ticket_cap:
+        if guardrails.exceeds_cap(params.quantity, state.ticket_cap):
             state.step = S.NEED_QUANTITY
             return _reply(
                 state,
@@ -374,6 +386,10 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
         state.quantity = None
         state.step = S.NEED_QUANTITY
         return _reply(state, str(exc) + " How many would you like?")
+    observability.log_tool(
+        state.session_id, "compute_quote", turn=state.turn, category=state.category,
+        quantity=state.quantity, total_sar=sar_str(quote.total, quote.currency),
+    )
 
     # --- 5. Seats + atomic hold ----------------------------------------- #
     if not state.hold_token:
@@ -393,6 +409,8 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             state.hold_token = hold.token
             state.hold_expires = hold.expires_at.isoformat()
             state.step = S.AWAITING_CONFIRMATION
+            observability.log_tool(state.session_id, "place_seat_hold", turn=state.turn, seats=state.seat_ids)
+            observability.log_transition(state.session_id, entry_step, S.AWAITING_CONFIRMATION, turn=state.turn)
             return _confirmation_reply(db, state, ev, quote)
 
         # Need seats: show the map.
@@ -429,6 +447,7 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             )
 
         if params.intent == "confirm":
+            assert guardrails.can_issue_payment(state.step)  # HITL gate (Constitution I)
             booking = create_booking_from_hold(
                 db,
                 email=state.email,
@@ -441,6 +460,9 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             )
             state.booking_id = booking.id
             state.step = S.PAYMENT
+            observability.log_tool(state.session_id, "create_booking", turn=state.turn,
+                                   booking_id=booking.id, total_sar=sar_str(booking.total, booking.currency))
+            observability.log_transition(state.session_id, entry_step, S.PAYMENT, turn=state.turn)
             return _reply(
                 state,
                 "Confirmed! ✅ Complete your payment to get your ticket.",
