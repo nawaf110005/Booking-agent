@@ -367,7 +367,8 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
                     state.step = S.EVENT_SELECTION
                     return _reply(
                         state,
-                        "I couldn't find that one. Here's what's on right now:",
+                        (f"I couldn't find anything for “{query}”. Here's what's on right now:"
+                         if query else "I couldn't find that one. Here's what's on right now:"),
                         events=_event_cards(db, catalog),
                         suggestions=["Coldplay", "Riyadh Derby", "Soundstorm"],
                     )

@@ -119,6 +119,19 @@ def heuristic_extract(message: str, step: str = "") -> BookingParams:
             params.event_query = query
             break
 
+    # Unknown event name: if no known event matched, capture what the user is after —
+    # "ticket(s)/seats for|to X" or "see/watch X" — so the agent can say "I couldn't
+    # find X" instead of ignoring the request or answering an unrelated FAQ.
+    if not params.event_query:
+        m_ev = re.search(
+            r"\b(?:tickets?|seats?|book|attend)\s+(?:for|to)\s+(?:the\s+|a\s+)?([a-z0-9][\w '&\-]*)", low
+        ) or re.search(r"\b(?:see|watch)\s+(?:the\s+|a\s+)?([a-z0-9][\w '&\-]*)", low)
+        if m_ev:
+            cand = re.sub(r"\s+(in|on|this|tonight|today|tomorrow|please)\b.*$", "", m_ev.group(1)).strip(" ?.!,-")
+            cand = " ".join(cand.split()[:4])
+            if cand and cand not in CATEGORIES and not _has_word(low, "cancel"):
+                params.event_query = cand
+
     # Seat ids (e.g. "G3, G4"). Exclude pure category words.
     seats = [s.upper() for s in SEAT_RE.findall(cleaned)]
     if seats:

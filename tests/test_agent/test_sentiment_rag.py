@@ -36,3 +36,32 @@ def test_rag_ignores_irrelevant_query() -> None:
 
 def test_answer_grounds_in_kb_offline(seeded: Session) -> None:
     assert "parking" in answer_question(seeded, "is there parking?").lower()
+
+
+def test_rag_ignores_generic_booking_words() -> None:
+    # "ticket"/"book"/"seat" are too generic to anchor an FAQ — must not match.
+    assert retrieve("I need a ticket for jb") == []
+    assert retrieve("book me some seats") == []
+
+
+def test_extractor_captures_unknown_event_name() -> None:
+    from booking_agent.agent.extract import heuristic_extract
+
+    assert heuristic_extract("I need ticket for jb").event_query == "jb"
+    assert heuristic_extract("tickets to the weeknd please").event_query == "weeknd"
+    # known events still resolve via keyword
+    assert heuristic_extract("4 gold tickets for Coldplay").event_query == "coldplay"
+
+
+def test_unknown_event_is_acknowledged_not_ignored(seeded: Session) -> None:
+    # "ticket for jb" (not in the catalog) must be acknowledged — not answered with
+    # an unrelated FAQ snippet (the old bug).
+    from booking_agent.agent.policy import respond
+    from booking_agent.agent.state import ConversationState
+
+    st = ConversationState(session_id="ue1")
+    r = respond(seeded, st, "I need ticket for jb")
+    assert st.event_id is None
+    assert "jb" in r["reply"].lower() or "couldn't find" in r["reply"].lower()
+    assert r["events"]                                # shows the catalog instead of ignoring
+    assert "showtime" not in r["reply"].lower()       # not the gates FAQ snippet

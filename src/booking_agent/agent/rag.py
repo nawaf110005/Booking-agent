@@ -35,7 +35,10 @@ KNOWLEDGE_BASE: list[dict[str, str]] = [
 _STOP = {"the", "a", "an", "is", "are", "do", "does", "i", "you", "to", "of", "on", "in",
          "at", "and", "or", "my", "me", "can", "what", "whats", "s", "it", "this", "that",
          "for", "with", "there", "any", "how", "when", "where", "your", "we", "be", "about",
-         "tell", "please", "want", "would", "get", "like", "some", "will"}
+         "tell", "please", "want", "would", "get", "like", "some", "will",
+         # generic booking words — too vague to anchor an FAQ match
+         "ticket", "tickets", "book", "booking", "event", "events", "show", "shows",
+         "seat", "seats", "need", "buy", "see", "watch", "find", "looking", "go", "going"}
 _WORD = re.compile(r"[a-z0-9]+")
 
 
