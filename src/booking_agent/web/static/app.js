@@ -969,16 +969,17 @@ async function init() {
 
   /* 5. Show static greeting bubble (no API call needed) */
   appendAgentBubble(
-    "Hello! I'm your Booking Assistant 👋\n\n" +
-    "I can help you find events, check pricing, select seats, and book tickets.\n\n" +
-    "Tell me what you're looking for, or click any event below to get started.",
+    "Hey! I'm Tazkara, your booking concierge 👋\n\n" +
+    "Tell me what you're into — a concert, the derby, a comedy night — and I'll find it, " +
+    "apply your member discount, and hold your seats. You confirm before anything is charged.",
     {
-      suggestions: ["Show me all events", "Coldplay tickets", "Family events in Riyadh"],
+      suggestions: ["What's on this weekend?", "Find me a concert", "Is there a member discount?"],
     }
   );
 
-  /* 6. Load events grid */
-  await loadEventsGrid();
+  /* 6. Wire the showcase "Try it" CTA → open the chat */
+  const demoCta = document.getElementById("demo-cta");
+  if (demoCta) demoCta.addEventListener("click", () => openChat());
 }
 
 /* ─────────────────────────────────────────────────────────────
