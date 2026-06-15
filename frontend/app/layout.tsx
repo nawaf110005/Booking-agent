@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tazkara — Live Events & Tickets",
+  title: "Booking Agent — Live Events & Tickets",
   description:
     "Book live events in one chat. A WeBook-inspired demo powered by the Booking-Agent (AI concierge for events in Saudi Arabia).",
 };

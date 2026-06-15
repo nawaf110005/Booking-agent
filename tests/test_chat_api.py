@@ -65,4 +65,4 @@ def test_pay_is_idempotent(client: TestClient) -> None:
 def test_website_is_served(client: TestClient) -> None:
     r = client.get("/")
     assert r.status_code == 200
-    assert "tazkara" in r.text.lower()
+    assert "booking agent" in r.text.lower()

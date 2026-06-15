@@ -43,7 +43,7 @@ Complete = Callable[[list[dict], list[dict]], dict]
 MAX_STEPS = 6  # loop-prevention cap on tool round-trips per user turn
 
 SYSTEM = (
-    "You are Tazkara, a warm, witty event-ticketing concierge for Saudi Arabia "
+    "You are Booking Agent, a warm, witty event-ticketing concierge for Saudi Arabia "
     "(Arabic/English). Chat naturally like a helpful friend: greet back, make a little "
     "small talk, answer questions, and give honest recommendations (best-value seats, "
     "what's fun this weekend). PERSONALISE using the booking-state note provided — use "

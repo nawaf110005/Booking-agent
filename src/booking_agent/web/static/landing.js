@@ -1,4 +1,4 @@
-/* Tazkara — landing-page motion: scroll-reveal, ticket particles,
+/* Booking Agent — landing-page motion: scroll-reveal, ticket particles,
    an auto-typing sample conversation, and count-up numbers.
    Standalone; does not depend on app.js. Respects reduced-motion. */
 (function () {

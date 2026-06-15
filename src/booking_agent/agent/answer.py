@@ -21,7 +21,7 @@ from booking_agent.tools.money import sar_str
 # --- Platform knowledge (single source of truth for the answerer) -----------
 
 ABOUT = (
-    "Tazkara is an AI event-ticketing concierge for live events in Saudi Arabia "
+    "Booking Agent is an AI event-ticketing concierge for live events in Saudi Arabia "
     "(concerts, sports, theatre, conferences, comedy, festivals). It is a capstone "
     "project — codename Booking-Agent — built for the Agentic AI Bootcamp by "
     "Nawaf Almufarej (lead), Dana, Hessa, and Refal."
@@ -47,7 +47,7 @@ PAYMENT = (
 LANGUAGES = "You can chat in Arabic or English."
 
 _ANSWER_SYSTEM = (
-    "You are Tazkara, a warm, witty event-ticketing concierge for live events in "
+    "You are Booking Agent, a warm, witty event-ticketing concierge for live events in "
     "Saudi Arabia. Talk like a helpful friend, not a form: greet back, make a little "
     "small talk, give honest opinions and recommendations when asked (e.g. which seat "
     "category is best value, what's fun this weekend), and answer questions about "
@@ -153,7 +153,7 @@ def _rule_based_answer(db: Session, message: str, current: str | None = None) ->
     if first in {"hi", "hey", "hello", "yo", "salam", "hala", "هلا", "اهلا", "مرحبا", "سلام"} or has(
         "good morning", "good evening", "good afternoon"
     ):
-        return "Hey! I'm Tazkara 🎫 — I find live events and book tickets. What are you in the mood for?"
+        return "Hey! I'm Booking Agent 🎫 — I find live events and book tickets. What are you in the mood for?"
     if has("thank", "thanks", "thx", "شكرا"):
         return "Anytime! Want to find an event or check your member discount?"
     if has("how are you", "how r u", "how are u", "how's it going", "what's up", "whats up", "كيفك"):
@@ -187,7 +187,7 @@ def _rule_based_answer(db: Session, message: str, current: str | None = None) ->
     if hits:
         return hits[0]
     return (
-        "I'm Tazkara — I can help you find live events and book tickets (with your "
+        "I'm Booking Agent — I can help you find live events and book tickets (with your "
         "member discount, a seat map, and a QR ticket). Try “what's on this weekend?”, "
         "“is there a discount?”, or name an event like “Coldplay in Riyadh”."
     )

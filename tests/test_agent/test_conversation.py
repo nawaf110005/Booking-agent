@@ -29,7 +29,7 @@ def test_name_personalised_from_email(seeded: Session) -> None:
 
 def test_rule_based_greeting_offline(seeded: Session) -> None:
     # No key → friendly canned greeting (not the "I can only…" brush-off).
-    assert "Tazkara" in answer_question(seeded, "hello")
+    assert "Booking Agent" in answer_question(seeded, "hello")
     assert "event" in answer_question(seeded, "thanks!").lower()
 
 
@@ -83,8 +83,8 @@ def test_offtopic_gets_clear_answer_not_canned_greeting(seeded: Session, monkeyp
     monkeypatch.setattr(policy_mod, "llm_extract", lambda m: BookingParams())  # nothing actionable
     monkeypatch.setattr(answer_mod, "llm_available", lambda: True)
     monkeypatch.setattr(answer_mod, "chat_complete",
-                        lambda s, u, **k: "I can't write code — I'm Tazkara, your ticket concierge. Want to find an event?")
+                        lambda s, u, **k: "I can't write code — I'm Booking Agent, your ticket concierge. Want to find an event?")
     st = ConversationState(session_id="c6")
     r = respond(seeded, st, "write me code")
-    assert r["reply"] == "I can't write code — I'm Tazkara, your ticket concierge. Want to find an event?"
+    assert r["reply"] == "I can't write code — I'm Booking Agent, your ticket concierge. Want to find an event?"
     assert "Tell me what you'd like to see" not in r["reply"]  # not the canned greeting

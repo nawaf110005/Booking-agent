@@ -238,6 +238,9 @@ function MessageBubble({
   if (msg.ticket) return <TicketCard ticket={msg.ticket} />;
 
   const isUser = msg.role === "user";
+  // Render **bold** as <strong>; newlines are handled by whitespace-pre-wrap.
+  const rich = (text: string) =>
+    text.split(/\*\*(.+?)\*\*/g).map((p, i) => (i % 2 ? <strong key={i}>{p}</strong> : <span key={i}>{p}</span>));
   return (
     <div className={isUser ? "flex flex-col items-end" : "flex flex-col items-start"}>
       <span className="mb-0.5 px-1 text-[10px] uppercase tracking-wide text-muted">
@@ -251,7 +254,7 @@ function MessageBubble({
               : "max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-surface2 px-3 py-2 text-sm"
           }
         >
-          {msg.text}
+          {rich(msg.text)}
         </div>
       )}
       {msg.reply && <Payload reply={msg.reply} now={now} onSend={onSend} onPay={onPay} />}

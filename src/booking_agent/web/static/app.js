@@ -1,5 +1,5 @@
 /**
- * app.js — Tazkara Booking-Agent Web UI
+ * app.js — Booking Agent Booking-Agent Web UI
  *
  * Architecture:
  *   - State object holds session_id, open/closed, active hold timers, etc.
@@ -140,11 +140,21 @@ function countdown(isoExpires) {
    DOM HELPERS
 ───────────────────────────────────────────────────────────── */
 
-/** Safely convert a plain string to node with \n → <br> (no innerHTML eval). */
+/** Safely convert a plain string to nodes: \n → <br>, **bold** → <strong> (no innerHTML eval). */
 function textToNodes(str) {
   const frag = document.createDocumentFragment();
   str.split("\n").forEach((line, i, arr) => {
-    frag.appendChild(document.createTextNode(line));
+    // split() with a capture group keeps the captured **bold** text at odd indices.
+    line.split(/\*\*(.+?)\*\*/g).forEach((part, idx) => {
+      if (!part) return;
+      if (idx % 2 === 1) {
+        const strong = document.createElement("strong");
+        strong.textContent = part;
+        frag.appendChild(strong);
+      } else {
+        frag.appendChild(document.createTextNode(part));
+      }
+    });
     if (i < arr.length - 1) frag.appendChild(document.createElement("br"));
   });
   return frag;
@@ -969,7 +979,7 @@ async function init() {
 
   /* 5. Show static greeting bubble (no API call needed) */
   appendAgentBubble(
-    "Hey! I'm Tazkara, your booking concierge 👋\n\n" +
+    "Hey! I'm your Booking Agent 👋\n\n" +
     "Tell me what you're into — a concert, the derby, a comedy night — and I'll find it, " +
     "apply your member discount, and hold your seats. You confirm before anything is charged.",
     {
