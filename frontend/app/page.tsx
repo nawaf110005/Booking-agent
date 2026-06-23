@@ -151,7 +151,7 @@ export default function Home() {
             <span className="ml-2 text-[10px] text-muted">AI booking concierge</span>
           </div>
         </div>
-        <ul className="hidden gap-6 text-sm text-white/80 md:flex">
+        <ul className="absolute left-1/2 hidden -translate-x-1/2 gap-6 text-sm text-white/80 md:flex">
           <li><a href="#how" className="hover:text-white">How it works</a></li>
           <li><a href="#why" className="hover:text-white">Why Booking Agent</a></li>
           <li><a href="#demo" className="hover:text-white">See it</a></li>
