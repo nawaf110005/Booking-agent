@@ -127,10 +127,24 @@ def _context(state: ConversationState) -> dict:
             "needs": _next_need(state), "turn": state.turn}
 
 
-def _converse(db: Session, state: ConversationState, message: str) -> dict:
-    """Concierge: answer a question / chit-chat at any step, personalised, keeping state."""
+def _converse(db: Session, state: ConversationState, params, message: str) -> dict:
+    """Concierge: answer a question / chit-chat at any step, personalised, keeping state.
+
+    If the question is about specific show(s) we carry (e.g. "is Coldplay playing?"),
+    remember them so a follow-up city ("jeddah") or "yes" can pick one — resolved by
+    `_resolve_pending_event` on the next turn.
+    """
+    suggestions = _step_suggestions(state)
+    if state.event_id is None and params.event_query:
+        matches = search_events(db, params.event_query, params.city)
+        if matches:
+            state.pending_event_ids = [m.id for m in matches]
+            state.last_query = params.event_query
+            cities = sorted({m.city for m in matches})
+            if len(cities) > 1:
+                suggestions = cities
     reply = answer_question(db, message, state.event_id, context=_context(state))
-    return make_payload(state, reply, suggestions=_step_suggestions(state))
+    return make_payload(state, reply, suggestions=suggestions)
 
 
 def _reset_booking(state: ConversationState) -> None:
@@ -138,6 +152,7 @@ def _reset_booking(state: ConversationState) -> None:
     state.seat_ids = []
     state.hold_token = state.hold_expires = state.booking_id = None
     state.last_query = None
+    state.pending_event_ids = []
     state.step = S.GREETING
 
 
@@ -175,6 +190,7 @@ def _switch_to(state: ConversationState, event_id: int, params) -> None:
     state.category = state.quantity = None
     state.seat_ids = []
     state.last_query = params.event_query
+    state.pending_event_ids = []
 
 
 def _maybe_switch_event(db: Session, state: ConversationState, params) -> dict | None:
@@ -290,6 +306,7 @@ def _present_event_choice(db: Session, state: ConversationState, params) -> dict
     results = search_events(db, query, params.city) if query else []
     if len(results) == 1:
         state.event_id = results[0].id
+        state.pending_event_ids = []
         return None
     state.step = S.EVENT_SELECTION
     if not query:
@@ -307,6 +324,8 @@ def _present_event_choice(db: Session, state: ConversationState, params) -> dict
             suggestions=["Coldplay", "Riyadh Derby", "Soundstorm"],
         )
     cities = sorted({e.city for e in results})
+    state.last_query = query
+    state.pending_event_ids = [e.id for e in results]
     return make_payload(
         state, "I found a few matches — which one?",
         events=event_cards(db, results), suggestions=cities,
@@ -334,11 +353,12 @@ def _run_booking(db: Session, state: ConversationState, params, message: str, co
             run_specialist(db, state, message, complete, CATALOG)
         if state.event_id is None:
             if not has_query and llm_available():
-                return _converse(db, state, message)  # off-topic / chit-chat when keyed
+                return _converse(db, state, params, message)  # off-topic / chit-chat when keyed
             choice = _present_event_choice(db, state, params)
             if choice is not None:
                 return choice
     ev = get_event_details(db, state.event_id)
+    state.pending_event_ids = []  # event locked in → drop the candidate list
 
     # Phase 2 — Membership: tier + cap from the email.
     if not state.email:
@@ -395,6 +415,55 @@ def _run_booking(db: Session, state: ConversationState, params, message: str, co
     return confirmation_payload(db, state, ev, quote)
 
 
+def _resolve_pending_event(db: Session, state: ConversationState, params, message: str) -> dict | None:
+    """Resolve a short reply that follows several presented shows: a bare city
+    ("jeddah") narrows the choice, or an affirmation ("yes") picks it — then the
+    booking advances. Returns a payload if handled, else None (let the normal flow
+    run this turn). The caller guards on `event_id is None` and `step != AWAITING`,
+    so this can never select past a chosen event or bypass the payment HITL gate.
+    """
+    candidates = []
+    for cid in state.pending_event_ids:
+        with contextlib.suppress(ToolError):
+            candidates.append(get_event_details(db, cid))
+    if not candidates:
+        state.pending_event_ids = []
+        return None
+    # A fresh named event / card click / browse takes over instead of resolving.
+    if params.event_query or params.event_id is not None or params.intent == "browse":
+        state.pending_event_ids = []
+        return None
+
+    city = (params.city or "").strip().lower()
+    if city:
+        narrowed = [e for e in candidates if city in e.city.lower()]
+        if len(narrowed) == 1:
+            state.event_id = narrowed[0].id
+            state.pending_event_ids = []
+            return _run_booking(db, state, params, message, _brain(state, params))
+        if narrowed:                                   # still several in that city
+            state.pending_event_ids = [e.id for e in narrowed]
+            state.step = S.EVENT_SELECTION
+            return make_payload(
+                state, "Which one?", events=event_cards(db, narrowed),
+                suggestions=[e.title.split(" — ")[0] for e in narrowed[:3]],
+            )
+        state.pending_event_ids = []
+        return None                                    # city not among them → normal flow
+
+    if params.intent == "confirm":                     # bare "yes" / "sure"
+        if len(candidates) == 1:
+            state.event_id = candidates[0].id
+            state.pending_event_ids = []
+            return _run_booking(db, state, params, message, _brain(state, params))
+        state.step = S.EVENT_SELECTION                 # ambiguous → ask which
+        return make_payload(
+            state, "Sure — which one?", events=event_cards(db, candidates),
+            suggestions=sorted({e.city for e in candidates}),
+        )
+    return None  # not a city / affirmation / new event → keep context, let normal flow run
+
+
 # --------------------------------------------------------------------------- #
 # Main turn handler
 # --------------------------------------------------------------------------- #
@@ -441,6 +510,15 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
                 suggestions=[r.title.split(" — ")[0] for r in results[:3]],
             )
         # Neither a yes nor a no → treat this turn as a fresh request (fall through).
+
+    # --- Resolve a pending event suggestion: a city ("jeddah") or "yes" picks a
+    #     previously-presented show and advances the booking. Guarded to no chosen
+    #     event and not the confirm gate, so "yes" can never skip the HITL confirm. -
+    if (state.pending_event_ids and state.event_id is None
+            and state.step != S.AWAITING_CONFIRMATION):
+        resolved = _resolve_pending_event(db, state, params, message)
+        if resolved is not None:
+            return resolved
 
     # --- Cancel: release any hold and step back to seat selection ----------- #
     if params.intent == "cancel" and state.step in (S.AWAITING_CONFIRMATION, S.SEAT_SELECTION, S.PAYMENT):
@@ -495,7 +573,7 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
 
     # --- Concierge: questions / chit-chat at ANY step, keeping state -------- #
     if params.intent == "ask" or (llm_available() and params.intent in ("greet", "smalltalk")):
-        return _converse(db, state, message)
+        return _converse(db, state, params, message)
 
     # --- HITL gate: confirm at the confirmation step, executed in code ------ #
     if state.step == S.AWAITING_CONFIRMATION:
@@ -584,6 +662,7 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             state.event_id = state.category = state.quantity = None
             state.seat_ids = []
             state.last_query = None
+        state.pending_event_ids = []
         return _discover(db, state, params, message)
 
     # --- Booking team (catalog → membership → pricing → seating) ------------ #

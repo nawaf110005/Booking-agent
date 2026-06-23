@@ -33,6 +33,7 @@ class ConversationState:
     interests: list[str] = field(default_factory=list)  # inferred genres for discovery
     sentiment: str | None = None  # last-turn sentiment label
     pending_suggestion: str | None = None  # genre offered for an unknown event; awaiting a yes/no
+    pending_event_ids: list[int] = field(default_factory=list)  # shows just presented; a city/"yes" can pick one
     hold_token: str | None = None
     hold_expires: str | None = None  # ISO string
     booking_id: int | None = None

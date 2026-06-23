@@ -414,3 +414,50 @@ def test_typo_event_question_resolves_not_faq(seeded: Session) -> None:
     assert "payment" not in r["reply"].lower()
     # resolves Coldplay → either disambiguation cards or a single match moving forward
     assert r["events"] or st.event_id is not None
+
+
+def test_question_then_city_picks_show_and_advances(seeded: Session) -> None:
+    """Regression: after the concierge mentions two same-name shows, a bare city
+    ("jeddah") selects that show and the booking advances (was dead-ending)."""
+    from booking_agent.tools.events import get_event_details
+
+    st = _state()
+    respond(seeded, st, "Coldplay in Riyadh")
+    respond(seeded, st, "what's on this weekend?")            # browse → clears the event
+    respond(seeded, st, "is cold play playing?")              # concierge: two shows
+    assert st.event_id is None
+    assert len(st.pending_event_ids) >= 2                     # candidates remembered
+
+    r = respond(seeded, st, "jeddah")                         # pick by city
+    assert st.event_id is not None
+    assert get_event_details(seeded, st.event_id).city == "Jeddah"
+    assert r["step"] == S.NEED_EMAIL                          # flow advances, not stuck
+
+
+def test_yes_after_single_suggested_show_selects(seeded: Session) -> None:
+    """'yes' after one presented show selects it and advances to email."""
+    st = _state()
+    respond(seeded, st, "is coldplay playing in jeddah?")
+    assert st.pending_event_ids
+    r = respond(seeded, st, "yes")
+    assert st.event_id is not None
+    assert r["step"] == S.NEED_EMAIL
+
+
+def test_yes_with_multiple_shows_asks_which_not_dead_end(seeded: Session) -> None:
+    """'yes' with several shows pending asks which — never the no-active-booking dead end."""
+    st = _state()
+    respond(seeded, st, "is coldplay playing?")
+    r = respond(seeded, st, "yes")
+    assert st.event_id is None
+    assert r["step"] == S.EVENT_SELECTION
+    assert "active booking" not in r["reply"].lower()
+
+
+def test_bare_yes_with_no_context_still_reports_no_booking(seeded: Session) -> None:
+    """Guard: a bare 'yes' with nothing pending must not select anything — it still
+    gives the no-active-booking message (the resolver never fires without candidates)."""
+    st = _state()
+    r = respond(seeded, st, "yes")
+    assert st.event_id is None
+    assert "active booking" in r["reply"].lower()
