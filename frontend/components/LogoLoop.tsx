@@ -191,9 +191,22 @@ export const LogoLoop = memo(
       }
     }, [isVertical]);
 
-    useResizeObserver(updateDimensions, [containerRef, seqRef], [logos, gap, logoHeight, isVertical]);
+    // Memoise the array args so the observer/loader effects don't re-run (and
+    // re-setState) on every render — otherwise React throws "Maximum update depth".
+    const resizeRefs = useMemo(() => [containerRef, seqRef], []);
+    const observerDeps = useMemo(() => [logos, gap, logoHeight, isVertical], [logos, gap, logoHeight, isVertical]);
 
-    useImageLoader(seqRef, updateDimensions, [logos, gap, logoHeight, isVertical]);
+    useResizeObserver(updateDimensions, resizeRefs, observerDeps);
+
+    useImageLoader(seqRef, updateDimensions, observerDeps);
+
+    // Measure once after first paint so the sequence width (and copy count) is
+    // known and the marquee actually scrolls — the observer alone can run before
+    // the row is laid out.
+    useEffect(() => {
+      const id = requestAnimationFrame(() => updateDimensions());
+      return () => cancelAnimationFrame(id);
+    }, [updateDimensions]);
 
     useAnimationLoop(trackRef, targetVelocity, seqWidth, seqHeight, isHovered, effectiveHoverSpeed, isVertical);
 

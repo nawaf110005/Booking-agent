@@ -175,12 +175,13 @@ export default function Home() {
 
       {/* Hero */}
       <header className="relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 text-center">
-        {/* Animated WebGL backdrop */}
-        <div className="absolute inset-0 z-0">
-          <DarkVeil hueShift={28} speed={0.4} warpAmount={0.08} noiseIntensity={0.02} />
+        {/* Animated brand backdrop — DarkVeil recoloured to the app's magenta→purple */}
+        <div className="absolute inset-0 z-0 isolate overflow-hidden">
+          <DarkVeil speed={0.4} warpAmount={0.1} noiseIntensity={0.02} />
+          <div className="absolute inset-0 bg-brand opacity-80 mix-blend-color" />
         </div>
         {/* Legibility overlay over the veil */}
-        <div className="absolute inset-0 z-0 bg-gradient-to-b from-bg/55 via-bg/35 to-bg/85" />
+        <div className="absolute inset-0 z-0 bg-gradient-to-b from-bg/35 via-bg/25 to-bg/85" />
         <div id="particles" className="particles" />
 
         <div className="relative z-10 max-w-3xl">
@@ -225,7 +226,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="relative z-10 mt-12 w-full border-y border-line bg-bg/50 py-4 backdrop-blur-sm">
+        <div className="relative z-10 mt-12 w-screen border-y border-line bg-bg/50 py-4 backdrop-blur-sm">
           <LogoLoop
             logos={VIBE_LOGOS}
             speed={50}
