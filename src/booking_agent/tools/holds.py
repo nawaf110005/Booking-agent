@@ -35,24 +35,30 @@ def _audit(session: Session, event_id: int, seat_id: str, action: str, detail: s
     )
 
 
-def _expire_event_holds(session: Session, event_id: int, now: datetime) -> int:
-    """Release holds for one event whose TTL has lapsed. Returns count expired."""
+def _expire_holds(session: Session, holds: list[Hold], now: datetime) -> int:
+    """Mark each lapsed hold EXPIRED and free its seat. Returns the count expired."""
 
-    expired = session.execute(
-        select(Hold).where(Hold.event_id == event_id, Hold.status == HoldStatus.ACTIVE)
-    ).scalars().all()
     count = 0
-    for hold in expired:
+    for hold in holds:
         if ensure_aware(hold.expires_at) <= now:
             hold.status = HoldStatus.EXPIRED
             seat = session.execute(
-                select(Seat).where(Seat.event_id == event_id, Seat.seat_id == hold.seat_id)
+                select(Seat).where(Seat.event_id == hold.event_id, Seat.seat_id == hold.seat_id)
             ).scalar_one_or_none()
             if seat is not None and seat.status == SeatStatus.HELD:
                 seat.status = SeatStatus.AVAILABLE
-                _audit(session, event_id, hold.seat_id, "hold_expired", f"token={hold.token}")
+                _audit(session, hold.event_id, hold.seat_id, "hold_expired", f"token={hold.token}")
             count += 1
     return count
+
+
+def _expire_event_holds(session: Session, event_id: int, now: datetime) -> int:
+    """Release holds for one event whose TTL has lapsed. Returns count expired."""
+
+    holds = session.execute(
+        select(Hold).where(Hold.event_id == event_id, Hold.status == HoldStatus.ACTIVE)
+    ).scalars().all()
+    return _expire_holds(session, holds, now)
 
 
 def check_seat_availability(
@@ -198,21 +204,9 @@ def release_expired_holds(session: Session, now: datetime | None = None) -> int:
     """
 
     now = now or utcnow()
-    expired = session.execute(
+    holds = session.execute(
         select(Hold).where(Hold.status == HoldStatus.ACTIVE)
     ).scalars().all()
-    count = 0
-    for hold in expired:
-        if ensure_aware(hold.expires_at) <= now:
-            hold.status = HoldStatus.EXPIRED
-            seat = session.execute(
-                select(Seat).where(
-                    Seat.event_id == hold.event_id, Seat.seat_id == hold.seat_id
-                )
-            ).scalar_one_or_none()
-            if seat is not None and seat.status == SeatStatus.HELD:
-                seat.status = SeatStatus.AVAILABLE
-                _audit(session, hold.event_id, hold.seat_id, "hold_expired", f"token={hold.token}")
-            count += 1
+    count = _expire_holds(session, holds, now)
     session.flush()
     return count
