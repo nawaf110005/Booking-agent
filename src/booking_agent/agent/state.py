@@ -43,3 +43,16 @@ class ConversationState:
         self.history.append({"role": role, "text": text})
         if len(self.history) > 40:  # keep memory bounded
             self.history = self.history[-40:]
+
+
+def state_summary(state: ConversationState) -> str:
+    """Privacy-safe one-line snapshot of booking state for an LLM system prompt.
+
+    Shares the first name and whether an email is known, never the address itself.
+    """
+    return (
+        f"name={state.name or 'unknown'}, event_selected={bool(state.event_id)}, "
+        f"email_known={bool(state.email)}, member_tier={state.tier or 'none'}, "
+        f"ticket_cap={state.ticket_cap}, category={state.category}, "
+        f"quantity={state.quantity}, seats_held={bool(state.hold_token)}, step={state.step}"
+    )
