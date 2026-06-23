@@ -98,10 +98,9 @@ rolls back. Tests in `tests/test_tools/test_holds.py` (TTL/expiry use `freezegun
 ## E. Evaluation & testing
 
 **Q: How do you evaluate an *agent* — outputs aren't deterministic?**
-Two layers. (1) A labelled **evaluation set** of message → expected slots with a scorer and
-an automated grader (`agent/eval_dataset.py`, `scripts/eval_agent.py`) — swap the model, keep
-the yardstick. (2) An **LLM-as-judge** that scores free-text replies 1–5 for helpfulness +
-grounding (`agent/judge.py`). Plus 161 unit/integration tests.
+A labelled **evaluation set** of message → expected slots with a scorer and an automated
+grader (`agent/eval_dataset.py`, `scripts/eval_agent.py`) — swap the model, keep the
+yardstick. Plus 181 unit/integration tests covering the booking flow, guardrails, and tools.
 
 **Q: How do you test the LLM path without calling the model in CI?**
 The provider is injectable. Tests stub `chat_complete` / the `complete` callable with canned
@@ -110,9 +109,9 @@ responses, so the loop, parsing, guardrails, and routing are all covered offline
 forces the offline brain for the booking-flow tests so they're deterministic.
 
 **Q: What's your test count and coverage focus?**
-161 tests, all green (~89% coverage). Coverage is concentrated where it matters: money, holds,
-the HITL gate, slot extraction, guardrails, and the per-specialist tool loop. The suite grew
-from 69 → 161 alongside the work.
+181 tests, all green against an 85%+ coverage gate. Coverage is concentrated where it matters:
+money, holds, the HITL gate, slot extraction, guardrails, and the per-specialist tool loop.
+The suite grew from 69 → 181 alongside the work.
 
 ---
 
@@ -173,13 +172,11 @@ Every tool call and state transition → a structured, bounded event log with em
 (`agent/observability.py`). It's what powers the "what did the agent do?" trace and failure
 diagnosis. See it live with `scripts/agent_smoke.py`.
 
-**Q: Is this multi-agent? You mentioned LangGraph.**
+**Q: Is this multi-agent?**
 Yes — it's implemented. The default is an **orchestrator** (`agent/orchestrator.py`) that
 routes each turn through four role specialists — **catalog / membership / pricing / seating**
 (`agent/specialists.py`) — each scoped to only its own tools and handing off as its phase
-completes. On top of that, `agent/graph.py` adds a **LangGraph-style adapter** and a
-**recommender** with a router. Full orchestration is no longer a stretch goal; it's the
-shipped default.
+completes. Full orchestration is no longer a stretch goal; it's the shipped default.
 
 ---
 
