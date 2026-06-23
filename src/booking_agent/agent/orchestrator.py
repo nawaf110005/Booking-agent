@@ -109,7 +109,11 @@ def _step_suggestions(state: ConversationState) -> list[str]:
         return [str(n) for n in dict.fromkeys((2, 4, state.ticket_cap)) if n <= state.ticket_cap]
     if state.step == S.AWAITING_CONFIRMATION:
         return ["confirm", "cancel"]
-    return ["Pick my seats", "What's the total?", "cancel"]
+    if state.step == S.PAYMENT:
+        return ["What's the total?", "cancel"]
+    if state.step == S.CONFIRMED:                       # already booked — offer what's next
+        return ["What's on this weekend?", "Book another event", "Is there a discount?"]
+    return ["What's the total?", "cancel"]              # seat selection
 
 
 def _context(state: ConversationState) -> dict:
