@@ -1,4 +1,4 @@
-# Tazkara (Booking-Agent)
+# Tazkra (Booking-Agent)
 
 Tazkara is a chat-first conversational ticket booking agent for live events in Saudi Arabia. It collapses the entire booking funnel—event search, membership verification, price quoting, visual seat selection, payment processing, and ticket generation—into a single chat interface.
 
