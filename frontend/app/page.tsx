@@ -3,9 +3,16 @@
 import { useEffect, useState } from "react";
 import Chat from "@/components/Chat";
 import DarkVeil from "@/components/DarkVeil";
+import GooeyNav from "@/components/GooeyNav";
 import LogoLoop from "@/components/LogoLoop";
 import RotatingText from "@/components/RotatingText";
 import { health } from "@/lib/api";
+
+const NAV_ITEMS = [
+  { label: "How it works", href: "#how" },
+  { label: "Why Booking Agent", href: "#why" },
+  { label: "See it", href: "#demo" },
+];
 
 const STEPS = [
   { n: 1, t: "Tell me", d: "“4 Gold for Coldplay in Riyadh.” Arabic or English." },
@@ -157,7 +164,7 @@ export default function Home() {
   return (
     <>
       {/* Nav */}
-      <nav className="sticky top-0 z-40 flex items-center justify-between border-b border-line/60 bg-bg/80 px-6 py-3 backdrop-blur">
+      <nav className="sticky top-0 z-40 flex items-center justify-between overflow-hidden border-b border-line/60 bg-bg/80 px-6 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-brand text-sm">🎫</span>
           <div className="leading-none">
@@ -165,12 +172,18 @@ export default function Home() {
             <span className="ml-2 text-[10px] text-muted">AI booking concierge</span>
           </div>
         </div>
-        <ul className="absolute left-1/2 hidden -translate-x-1/2 gap-6 text-sm text-white/80 md:flex">
-          <li><a href="#how" className="hover:text-white">How it works</a></li>
-          <li><a href="#why" className="hover:text-white">Why Booking Agent</a></li>
-          <li><a href="#demo" className="hover:text-white">See it</a></li>
-        </ul>
-        <span className="rounded-full border border-line px-3 py-1 text-xs text-white/80">EN</span>
+        <div className="absolute left-1/2 hidden -translate-x-1/2 text-sm md:block">
+          <GooeyNav
+            items={NAV_ITEMS}
+            particleCount={12}
+            particleDistances={[80, 10]}
+            particleR={90}
+            animationTime={600}
+            timeVariance={300}
+            colors={[1, 2, 3, 1, 2, 3, 1, 4]}
+            initialActiveIndex={0}
+          />
+        </div>
       </nav>
 
       {/* Hero */}
