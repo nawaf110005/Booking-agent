@@ -237,6 +237,31 @@ def test_can_change_category_before_hold(seeded: Session) -> None:
     assert r["quote"]["category"] == "gold"
 
 
+def test_quantity_only_does_not_attempt_a_hold(seeded: Session, coldplay_riyadh_id: int, monkeypatch) -> None:
+    # With the live model on, giving only a quantity must NOT run the seating
+    # specialist (which would invent seat ids like 'G-1'); it shows the seat map.
+    from booking_agent.agent import orchestrator as orch
+    from booking_agent.agent import tool_agent
+
+    def invents_seats(messages, tools):
+        names = {t["function"]["name"] for t in tools}
+        if "hold_seats" in names:  # if ever asked to seat, it makes up ids
+            return {"content": "", "tool_calls": [{"id": "x", "name": "hold_seats",
+                                                   "arguments": {"seat_ids": ["G-1", "G-2"]}}]}
+        return {"content": "", "tool_calls": []}
+
+    monkeypatch.setattr(orch, "llm_available", lambda: True)
+    monkeypatch.setattr(orch, "llm_extract", lambda m: None)
+    monkeypatch.setattr(tool_agent, "default_complete", invents_seats)
+    st = ConversationState(session_id="q", event_id=coldplay_riyadh_id, email="nawaf@example.com",
+                           name="Nawaf", tier="platinum", is_member=True, ticket_cap=8,
+                           category="gold", step=S.NEED_QUANTITY)
+    r = respond(seeded, st, "2")
+    assert st.hold_token is None                      # no hold attempted
+    assert r["step"] == S.SEAT_SELECTION              # just shows the map
+    assert "not found" not in r["reply"].lower() and "sorry" not in r["reply"].lower()
+
+
 def test_taken_seats_give_a_clear_error(seeded: Session) -> None:
     # #6: G1/G2 are seeded SOLD for the Coldplay Riyadh show → clear, helpful error.
     st = _state()

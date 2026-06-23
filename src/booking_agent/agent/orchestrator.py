@@ -367,9 +367,11 @@ def _run_booking(db: Session, state: ConversationState, params, message: str, co
     if not state.hold_token and not params.seat_ids:
         run_specialist(db, state, message, complete, PRICING)
 
-    # Phase 4 — Seating: atomically hold the chosen seats.
+    # Phase 4 — Seating: hold the chosen seats — but ONLY if the user actually named
+    # seats. Otherwise just show the map and let them pick (without this guard the LLM
+    # would invent seat ids like 'G-1' when given only a quantity).
     executed: list[dict] = []
-    if not state.hold_token:
+    if not state.hold_token and params.seat_ids:
         executed = run_specialist(db, state, message, complete, SEATING)
     if not state.hold_token:
         # If a hold was attempted but failed (seats taken / wrong count), say so

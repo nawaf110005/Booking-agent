@@ -59,7 +59,9 @@ def test_specialist_team_books_with_injected_brain(seeded: Session, monkeypatch)
     brain = TeamBrain()
     _enable_llm(monkeypatch, brain)
     st = ConversationState(session_id="t")
-    r = respond(seeded, st, "4 gold for Coldplay in Riyadh, nawaf@example.com")
+    # Seats are named, so the seating specialist actually holds (we no longer let the
+    # model invent seats when the user only gave a quantity).
+    r = respond(seeded, st, "4 gold for Coldplay in Riyadh, nawaf@example.com, seats G3 G4 G5 G6")
 
     # The model drove every specialist; the orchestrator reached the HITL gate.
     assert st.event_id is not None
