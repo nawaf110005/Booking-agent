@@ -1,5 +1,4 @@
-"""Role-based specialist agents (Week 5: *Role-Based Agents*, *Multi-Agent
-Orchestration*).
+"""Role-based specialist agents.
 
 The booking task is decomposed across four narrow specialists, each an LLM
 tool-calling loop restricted to *only* the tools for its role. The orchestrator
@@ -23,7 +22,7 @@ from booking_agent.agent import state as S
 from booking_agent.agent.state import ConversationState
 from booking_agent.agent.tool_specs import TOOL_SCHEMAS, dispatch
 
-# Loop-prevention cap on tool round-trips within a single specialist (Week 5).
+# Loop-prevention cap on tool round-trips within a single specialist.
 MAX_SPECIALIST_STEPS = 4
 
 _BASE = (
@@ -52,22 +51,10 @@ MEMBERSHIP = Specialist("membership", "membership", ("lookup_member",))
 PRICING = Specialist("pricing", "pricing", ("list_categories", "quote_price"))
 SEATING = Specialist("seating", "seating", ("hold_seats",))
 
-ROSTER = (CATALOG, MEMBERSHIP, PRICING, SEATING)
-
 
 def _schemas_for(names: tuple[str, ...]) -> list[dict]:
     wanted = set(names)
     return [t for t in TOOL_SCHEMAS if t["function"]["name"] in wanted]
-
-
-def _state_summary(state: ConversationState) -> str:
-    # Privacy: first name + whether an email is known, never the address itself.
-    return (
-        f"name={state.name or 'unknown'}, event_selected={bool(state.event_id)}, "
-        f"email_known={bool(state.email)}, member_tier={state.tier or 'none'}, "
-        f"ticket_cap={state.ticket_cap}, category={state.category}, "
-        f"quantity={state.quantity}, seats_held={bool(state.hold_token)}, step={state.step}"
-    )
 
 
 def run_specialist(
@@ -89,7 +76,7 @@ def run_specialist(
     tools = _schemas_for(specialist.tools)
     messages: list[dict] = [
         {"role": "system", "content": specialist.system_prompt},
-        {"role": "system", "content": "Current booking state: " + _state_summary(state)},
+        {"role": "system", "content": "Current booking state: " + S.state_summary(state)},
         {"role": "user", "content": message},
     ]
     executed: list[dict] = []

@@ -1,4 +1,4 @@
-"""Typed agent response (FR-010).
+"""Typed agent response.
 
 Every turn returns a structured payload; this Pydantic model types it at the API
 boundary and adds a `response_type` discriminator (message | event_cards |

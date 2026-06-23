@@ -1,9 +1,8 @@
-"""Tool schemas + dispatcher for the tool-calling agent (Week 4: *Designing Tool
-Systems*, *Tool Schema and Structured Arguments*, *Tool Dispatcher Architecture*).
+"""Tool schemas + dispatcher for the tool-calling agent.
 
 The model is given these JSON function schemas and decides which to call; the
-dispatcher runs the *real* F001 Python tools and updates the conversation state.
-Two safety properties (Week 4 *Autonomy Limits and Guardrails*; Constitution I):
+dispatcher runs the real Python tools and updates the conversation state.
+Two safety properties (Constitution I):
 
   * payment/booking is **not** a tool here — the model can never trigger a charge;
   * any unknown/forbidden tool name returns an error result, not an action.

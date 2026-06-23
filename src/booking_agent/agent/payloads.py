@@ -1,9 +1,9 @@
 """Presentation layer — turns conversation state into the structured `AgentResponse`
 payloads the UI consumes (event cards, category list, quote, seat map, confirmation).
 
-The *agents* decide and act (call tools, mutate state); this module only *renders*
-the result and asks for the next missing detail. Lifted out of the old FSM so the
-orchestrator and specialists share one source of truth for what a turn returns.
+The agents decide and act (call tools, mutate state); this module only renders the
+result and asks for the next missing detail, so the orchestrator and specialists
+share one source of truth for what a turn returns.
 """
 
 from __future__ import annotations

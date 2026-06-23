@@ -1,6 +1,0 @@
-email,name,tier,discount_bps,discount_pct,ticket_cap
-refal@example.com,Refal,bronze,500,5%,4
-dana@example.com,Dana,gold,1200,12%,6
-omar@example.com,Omar,gold,1200,12%,6
-nawaf@example.com,Nawaf Almufarej,platinum,1500,15%,8
-hessa@example.com,Hessa,silver,1000,10%,6

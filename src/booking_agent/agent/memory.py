@@ -1,8 +1,8 @@
-"""Long-term agent memory (Week 5: *Agent Memory Systems*).
+"""Long-term agent memory.
 
 Remembers a buyer's past bookings across sessions, keyed by email, so the agent
 can recall history ("welcome back — last time you saw Coldplay"). In-memory for
-the demo; a vector store is the documented upgrade for semantic recall.
+the demo.
 """
 
 from __future__ import annotations

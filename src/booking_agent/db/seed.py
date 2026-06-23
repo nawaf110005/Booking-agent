@@ -68,8 +68,7 @@ def seed_demo(session: Session) -> None:
     now = datetime.now(tz=UTC)
 
     def _showtime(days: int, hour: int = 20) -> datetime:
-        """A believable, stable showtime: today + ``days`` pinned to a fixed hour —
-        not the current wall-clock minute, which produced odd times like 09:17."""
+        """A believable, stable showtime: today + ``days`` pinned to a fixed hour."""
         d = now + timedelta(days=days)
         return datetime(d.year, d.month, d.day, hour, 0, tzinfo=UTC)
 

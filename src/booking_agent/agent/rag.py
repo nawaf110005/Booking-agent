@@ -1,4 +1,4 @@
-"""In-memory RAG over a small venue/FAQ knowledge base (spec 007; Week 2-3).
+"""In-memory RAG over a small venue/FAQ knowledge base.
 
 No external vector DB — a dependency-free, stopword-filtered token-overlap
 retriever, enough to ground answers about venues, parking, entry, accessibility,

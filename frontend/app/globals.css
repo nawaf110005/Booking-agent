@@ -48,15 +48,6 @@ body {
   -webkit-background-clip: text; background-clip: text; color: transparent; animation: gradShift 6s ease infinite; display: inline-block; }
 @keyframes gradShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 
-.hero-aurora { position: absolute; inset: 0; z-index: 0; filter: blur(64px); opacity: .5; pointer-events: none; }
-.blob { position: absolute; width: 46vw; height: 46vw; max-width: 560px; max-height: 560px; border-radius: 50%; mix-blend-mode: screen; }
-.blob-1 { background: radial-gradient(circle at 30% 30%, #e6007e, transparent 60%); top: -8%; left: -6%; animation: blob1 16s ease-in-out infinite; }
-.blob-2 { background: radial-gradient(circle at 70% 40%, #7b2ff7, transparent 60%); top: 4%; right: -10%; animation: blob2 19s ease-in-out infinite; }
-.blob-3 { background: radial-gradient(circle at 50% 60%, #b818c8, transparent 60%); bottom: -14%; left: 30%; animation: blob3 22s ease-in-out infinite; }
-@keyframes blob1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(8%,10%) scale(1.15); } }
-@keyframes blob2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-10%,6%) scale(1.2); } }
-@keyframes blob3 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(6%,-8%) scale(1.1); } }
-
 .particles { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
 .particle { position: absolute; bottom: -40px; opacity: 0; animation: floatUp linear forwards; }
 @keyframes floatUp { 0% { opacity: 0; transform: translateY(0) rotate(0); } 10% { opacity: .6; } 90% { opacity: .6; }
@@ -68,14 +59,6 @@ body {
 @keyframes shine { 0% { left: -130%; } 55% { left: 140%; } 100% { left: 140%; } }
 .glow { animation: pulseGlow 3s ease-in-out infinite; }
 @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(230,0,126,.45); } 50% { box-shadow: 0 0 34px 4px rgba(123,47,247,.5); } }
-
-.marquee { position: relative; width: 100%; overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
-.marquee-track { display: flex; gap: 2.4rem; width: max-content; animation: marquee 22s linear infinite;
-  font-weight: 800; font-size: 1.2rem; color: #8888aa; text-transform: uppercase; letter-spacing: .06em; }
-.marquee-track span:nth-child(even) { color: #b818c8; }
-@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 .bubble { opacity: 0; transform: translateY(10px) scale(.96); }
 .bubble.show { animation: pop .45s cubic-bezier(.2,.8,.2,1) forwards; }

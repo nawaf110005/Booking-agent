@@ -25,12 +25,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-agent = [
-    "langchain>=0.2.0",
-    "langchain-anthropic>=0.1.15",
-    "langchain-openai>=0.1.7",
-    "langgraph>=0.1.0",
-]
 # Lightweight LLM path used by agent/llm.py (direct SDKs; covers nanogpt via openai).
 llm = [
     "openai>=1.40.0",
@@ -40,9 +34,6 @@ api = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.30.0",
     "httpx>=0.27.0",       # Moyasar sandbox calls + test client
-]
-ui = [
-    "streamlit>=1.36.0",
 ]
 fulfilment = [
     "reportlab>=4.2.0",    # PDF ticket
@@ -88,7 +79,6 @@ source = ["src/booking_agent"]
 omit = [
     "src/booking_agent/cli.py",
     "src/booking_agent/db/seed.py",
-    "src/booking_agent/ui/app.py",        # Streamlit page; logic lives in components
     "src/booking_agent/api/app.py",       # thin FastAPI factory
 ]
 

@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Chat from "@/components/Chat";
+import DarkVeil from "@/components/DarkVeil";
+import GooeyNav from "@/components/GooeyNav";
+import LogoLoop from "@/components/LogoLoop";
+import RotatingText from "@/components/RotatingText";
 import { health } from "@/lib/api";
+
+const NAV_ITEMS = [
+  { label: "How it works", href: "#how" },
+  { label: "Why Booking Agent", href: "#why" },
+  { label: "See it", href: "#demo" },
+];
 
 const STEPS = [
   { n: 1, t: "Tell me", d: "“4 Gold for Coldplay in Riyadh.” Arabic or English." },
@@ -39,6 +49,17 @@ const DEMO = [
 ];
 
 const VIBES = ["Concerts", "Sports", "Comedy", "Theatre", "Festivals", "Conferences"];
+
+// Category strip rendered by the LogoLoop marquee.
+const VIBE_LOGOS = VIBES.map((v) => ({
+  node: (
+    <span className="flex items-center gap-3 font-extrabold uppercase tracking-[0.06em] text-muted">
+      {v}
+      <span className="text-brand-mid">✦</span>
+    </span>
+  ),
+  title: v,
+}));
 
 export default function Home() {
   const [aiActive, setAiActive] = useState(false);
@@ -143,7 +164,7 @@ export default function Home() {
   return (
     <>
       {/* Nav */}
-      <nav className="sticky top-0 z-40 flex items-center justify-between border-b border-line/60 bg-bg/80 px-6 py-3 backdrop-blur">
+      <nav className="sticky top-0 z-40 flex items-center justify-between overflow-hidden border-b border-line/60 bg-bg/80 px-6 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-brand text-sm">🎫</span>
           <div className="leading-none">
@@ -151,29 +172,49 @@ export default function Home() {
             <span className="ml-2 text-[10px] text-muted">AI booking concierge</span>
           </div>
         </div>
-        <ul className="hidden gap-6 text-sm text-white/80 md:flex">
-          <li><a href="#how" className="hover:text-white">How it works</a></li>
-          <li><a href="#why" className="hover:text-white">Why Booking Agent</a></li>
-          <li><a href="#demo" className="hover:text-white">See it</a></li>
-        </ul>
-        <span className="rounded-full border border-line px-3 py-1 text-xs text-white/80">EN</span>
+        <div className="absolute left-1/2 hidden -translate-x-1/2 text-sm md:block">
+          <GooeyNav
+            items={NAV_ITEMS}
+            particleCount={12}
+            particleDistances={[80, 10]}
+            particleR={90}
+            animationTime={600}
+            timeVariance={300}
+            colors={[1, 2, 3, 1, 2, 3, 1, 4]}
+            initialActiveIndex={0}
+          />
+        </div>
       </nav>
 
       {/* Hero */}
       <header className="relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 text-center">
-        <div className="hero-aurora">
-          <span className="blob blob-1" />
-          <span className="blob blob-2" />
-          <span className="blob blob-3" />
+        {/* Animated brand backdrop — DarkVeil recoloured to the app's magenta→purple */}
+        <div className="absolute inset-0 z-0 isolate overflow-hidden">
+          <DarkVeil speed={0.4} warpAmount={0.1} noiseIntensity={0.02} />
+          <div className="absolute inset-0 bg-brand opacity-80 mix-blend-color" />
         </div>
+        {/* Legibility overlay over the veil */}
+        <div className="absolute inset-0 z-0 bg-gradient-to-b from-bg/35 via-bg/25 to-bg/85" />
         <div id="particles" className="particles" />
 
         <div className="relative z-10 max-w-3xl">
           <span className="reveal inline-block rounded-full border border-line px-3 py-1 text-xs uppercase tracking-widest text-white/70">
             🎫 AI-Powered Ticketing · Saudi Arabia
           </span>
-          <h1 className="reveal mt-6 text-5xl font-extrabold leading-[1.05] md:text-7xl">
-            Book live events <span className="grad-anim">in one chat.</span>
+          <h1 className="reveal mt-6 flex flex-wrap items-baseline justify-center gap-x-3 text-5xl font-extrabold leading-[1.05] md:text-7xl">
+            <span>Book live events in one</span>
+            <RotatingText
+              texts={["chat.", "click.", "message.", "minute."]}
+              elementLevelClassName="grad-anim"
+              splitLevelClassName="overflow-hidden pb-2"
+              staggerFrom="last"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "-120%" }}
+              staggerDuration={0.02}
+              transition={{ type: "spring", damping: 30, stiffness: 400 }}
+              rotationInterval={2200}
+            />
           </h1>
           <p className="reveal mx-auto mt-5 max-w-xl text-lg text-white/70">
             From “I want a ticket” to a QR ticket in your inbox — no forms, no five-step
@@ -198,15 +239,17 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="marquee relative z-10 mt-12 w-full border-y border-line py-4">
-          <div className="marquee-track">
-            {[...VIBES, ...VIBES].map((v, i) => (
-              <span key={i}>
-                {v}
-                <span aria-hidden className="px-4 text-brand-purple">✦</span>
-              </span>
-            ))}
-          </div>
+        <div className="relative z-10 mt-12 w-screen border-y border-line bg-bg/50 py-4 backdrop-blur-sm">
+          <LogoLoop
+            logos={VIBE_LOGOS}
+            speed={50}
+            direction="left"
+            logoHeight={20}
+            gap={36}
+            fadeOut
+            fadeOutColor="#0b0b0f"
+            ariaLabel="Event categories"
+          />
         </div>
         <div className="scroll-cue absolute bottom-5"><span /></div>
       </header>

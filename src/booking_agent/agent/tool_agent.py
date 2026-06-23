@@ -1,7 +1,6 @@
-"""Tool-calling agent mode — the model drives the tools (Week 4: *Reason–Act–
-Observe Loop*; Week 5: *Loop Prevention*).
+"""Tool-calling agent mode — the model drives the tools.
 
-This is the genuinely "agentic" path: instead of a hardcoded state machine, the
+This is the genuinely "agentic" path: the
 LLM decides which tool to call each step, we execute it (`tool_specs.dispatch`),
 feed the result back, and repeat until the model answers or a step cap trips
 (loop prevention). The dangerous action — creating the booking / payment — is
@@ -89,14 +88,6 @@ def _payload(state: ConversationState, text: str, *, suggestions: list[str] | No
     return payload
 
 
-def _state_summary(state: ConversationState) -> str:
-    # Privacy: share the first name + whether an email is known, never the address.
-    return (f"name={state.name or 'unknown'}, event_selected={bool(state.event_id)}, "
-            f"email_known={bool(state.email)}, member_tier={state.tier or 'none'}, "
-            f"ticket_cap={state.ticket_cap}, category={state.category}, quantity={state.quantity}, "
-            f"seats_held={bool(state.hold_token)}, step={state.step}")
-
-
 def _confirmation_payload(db: Session, state: ConversationState) -> dict:
     ev = get_event_details(db, state.event_id)
     quote = compute_quote(db, state.event_id, state.category, state.quantity, _tier(state))
@@ -159,7 +150,7 @@ def respond_with_tools(db: Session, state: ConversationState, message: str,
     # --- Reason–Act–Observe loop ------------------------------------------- #
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM},
-        {"role": "system", "content": "Current booking state: " + _state_summary(state)},
+        {"role": "system", "content": "Current booking state: " + S.state_summary(state)},
         {"role": "user", "content": message},
     ]
     for _ in range(max_steps):

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = Field(default=f"sqlite:///{PROJECT_ROOT / 'booking.db'}")
     log_level: str = Field(default="INFO")
 
-    # LLM (F002). Provider: anthropic | openai | nanogpt | google (Gemini, via its
+    # LLM provider: anthropic | openai | nanogpt | google (Gemini, via its
     # OpenAI-compatible endpoint). nanogpt/google reuse the OpenAI SDK + a base_url.
     anthropic_api_key: str = ""
     openai_api_key: str = ""
@@ -54,14 +54,11 @@ class Settings(BaseSettings):
     # Payments — virtual (fake) gateway only: completes the booking offline and
     # issues the QR ticket, no external provider.
     payment_gateway: str = Field(default="fake")  # fake (virtual checkout)
-    # --- Moyasar provider disabled for now (kept commented for a future F003 swap). ---
-    # moyasar_secret_key: str = ""
-    # moyasar_webhook_secret: str = ""
 
-    # Ticket signing (F003) — HMAC key for the QR token.
+    # Ticket signing — HMAC key for the QR token.
     ticket_hmac_key: str = Field(default="dev-insecure-change-me")
 
-    # Email (F003)
+    # Email
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
@@ -71,7 +68,7 @@ class Settings(BaseSettings):
     # API
     booking_agent_admin_token: str = ""
     booking_agent_allowed_origins: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000,http://localhost:8501,http://127.0.0.1:8501"
+        default="http://localhost:3000,http://127.0.0.1:3000"
     )
 
     model_config = SettingsConfigDict(

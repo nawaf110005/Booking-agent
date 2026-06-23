@@ -1,8 +1,8 @@
-"""Tiny per-user preference memory (personalisation; spec 006).
+"""Tiny per-user preference memory (personalisation).
 
 Remembers a buyer's inferred interests across sessions, keyed by email — the
 "profile" the agent consults so it doesn't re-ask what you like every time. In
-memory for the demo (Redis/DB is the documented upgrade), mirroring SESSION_STORE.
+memory for the demo, mirroring SESSION_STORE.
 """
 
 from __future__ import annotations

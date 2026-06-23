@@ -59,9 +59,8 @@ seatmaps/*.png
 .chroma/
 chroma_data/
 
-# Spec-kit agent folder (may contain creds — per spec-kit notice)
-.claude/.credentials*
-.claude/auth*
+# Local agent/editor folder (launch configs, creds) — keep out of the repo
+.claude/
 
 # uv
 .python-version

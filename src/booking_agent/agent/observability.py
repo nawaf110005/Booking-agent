@@ -1,5 +1,4 @@
-"""Observable reasoning (Constitution VII / FR-011; Week 4 *Debugging and
-Controlling Agents*, Week 6 *Failure Diagnosis Workflow*).
+"""Observable reasoning (Constitution VII).
 
 Every tool call and key state transition is recorded as a structured,
 PII-redacted event — emitted through stdlib logging AND kept in a bounded

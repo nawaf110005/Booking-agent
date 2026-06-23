@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Booking-Agent launcher (macOS/Linux).
 #   ./run.sh full      # backend (:8000) + Next.js frontend (:3000/:3001)  ← recommended
-#   ./run.sh web       # backend only; built-in static site on http://localhost:8000
+#   ./run.sh web       # backend API only on http://localhost:8000 (docs at /docs)
 #   ./run.sh frontend  # Next.js dev server only (needs backend running)
 #   ./run.sh setup     # install deps + seed the demo catalog
 #   ./run.sh test      # run the test suite
@@ -12,7 +12,7 @@ cmd="${1:-full}"
 
 setup() {
   [ -d "$root/.venv" ] || uv --directory "$root" venv --python 3.11
-  uv --directory "$root" pip install -e ".[dev,api,ui,llm]"
+  uv --directory "$root" pip install -e ".[dev,api,llm]"
   uv --directory "$root" run booking-agent init-db
   uv --directory "$root" run booking-agent seed
 }
@@ -25,7 +25,7 @@ case "$cmd" in
     setup
     echo ""
     echo "  ==============================================="
-    echo "   Open  http://localhost:8000   (click 'Book with AI')"
+    echo "   Backend API on  http://localhost:8000   (docs at /docs)"
     echo "  ==============================================="
     echo ""
     uv --directory "$root" run uvicorn booking_agent.api.app:app --reload --reload-dir "$root/src" --port 8000
