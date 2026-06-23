@@ -202,6 +202,19 @@ def test_can_start_a_new_event_right_after_payment(seeded: Session) -> None:
     assert "paid and your ticket is issued" not in r["reply"]  # didn't just announce completion
 
 
+def test_can_switch_to_a_genre_mid_flow(seeded: Session) -> None:
+    # "changed my mind, I want musical events" drops the current (sports) event and
+    # browses the music genre instead of staying stuck on the derby.
+    st = _state()
+    respond(seeded, st, "Riyadh derby")
+    assert st.event_id is not None
+    r = respond(seeded, st, "i changed my mind i need musical events")
+    assert st.event_id is None                                   # dropped the derby
+    titles = [e["title"] for e in (r["events"] or [])]
+    assert any("Coldplay" in t or "Soundstorm" in t for t in titles)
+    assert not any("Derby" in t for t in titles)                 # not the sports event
+
+
 def test_can_change_quantity_before_hold(seeded: Session) -> None:
     # #1 slot correction: a new quantity before seats are held updates and re-quotes.
     st = _state()

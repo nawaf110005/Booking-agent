@@ -566,8 +566,18 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
                 suggestions=["What's on this weekend?", "Book another event", "Is there a discount?"],
             )
 
-    # --- Discovery / browse ------------------------------------------------- #
-    if state.event_id is None and params.intent == "browse":
+    # --- Discovery / browse — also drops a pre-hold event when they change their
+    #     mind toward a genre ("nvm, I want musical events"), not just a named event. #
+    interest = detect_interest(message)
+    has_slot = bool(params.email or params.category or params.quantity is not None
+                    or params.seat_ids or params.event_id)
+    named_event = bool(params.event_query) and bool(search_events(db, params.event_query, params.city))
+    browse_like = params.intent == "browse" or (interest is not None and not has_slot and not named_event)
+    if browse_like and not state.hold_token:
+        if state.event_id is not None:               # changed their mind → drop it, keep identity
+            state.event_id = state.category = state.quantity = None
+            state.seat_ids = []
+            state.last_query = None
         return _discover(db, state, params, message)
 
     # --- Booking team (catalog → membership → pricing → seating) ------------ #
