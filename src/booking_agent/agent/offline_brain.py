@@ -6,9 +6,8 @@ tools)` built from the heuristic slot extractor: given what the user said (parse
 into `BookingParams`) and which tools a specialist is offering, it emits the one
 appropriate tool call — or no call, signalling "ask the user".
 
-This is how the FSM's deterministic logic survives the FSM's deletion: instead of
-a hand-coded state machine *being* the agent, it now plays the role of a stand-in
-*model* that the real agent loop calls. Same agent, swappable brain.
+Deterministic logic plays the role of a stand-in *model* that the real agent
+loop calls, rather than being the agent itself. Same agent, swappable brain.
 """
 
 from __future__ import annotations

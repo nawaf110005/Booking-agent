@@ -230,7 +230,7 @@ class AuditLog(Base):
 
 
 class UserPreferences(Base):
-    """Per-user preference profile for personalisation (F006)."""
+    """Per-user preference profile for personalisation."""
 
     __tablename__ = "user_preferences"
 
@@ -244,7 +244,7 @@ class UserPreferences(Base):
 
 
 class InteractionLog(Base):
-    """Per-turn conversation log incl. sentiment, for evaluation (F006)."""
+    """Per-turn conversation log incl. sentiment, for evaluation."""
 
     __tablename__ = "interaction_log"
     __table_args__ = (Index("ix_interaction_session", "session_id", "turn_no"),)

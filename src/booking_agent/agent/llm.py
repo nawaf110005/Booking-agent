@@ -3,7 +3,7 @@
 Activates only when a provider key is configured (see config.active_llm_key).
 Supports Anthropic, OpenAI, and Nano-GPT (OpenAI-compatible proxy). On any
 import/auth/parse error it returns None and the caller uses the heuristic —
-the failure is recorded in `LAST_ERROR` so the UI/health can surface it.
+the failure is recorded in `LAST_ERROR` so health can surface it.
 """
 
 from __future__ import annotations

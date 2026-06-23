@@ -19,9 +19,7 @@ class SessionStore:
 
     * **Honour the client's id.** ``get_or_create("abc")`` for an unknown ``abc``
       creates the session *under that id*, so the next turn with the same id reuses
-      it. (The old code minted a fresh random id every turn an unknown id arrived —
-      which happens after any backend restart — so the conversation could never
-      accumulate and appeared to "start over" on every message.)
+      it — the conversation keeps accumulating instead of starting over each message.
     * **Survive restarts.** The in-memory dict is wiped when the process restarts;
       persisting each turn to ``<root>/.sessions/<id>.json`` lets an in-progress
       booking resume seamlessly. Best-effort: any IO error is swallowed so it can

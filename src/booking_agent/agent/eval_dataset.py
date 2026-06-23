@@ -1,5 +1,4 @@
-"""Shared evaluation set for the slot extractor (bootcamp Week 6: *Build an
-Evaluation Set* / *Evaluate the Agent System*).
+"""Shared evaluation set for the slot extractor.
 
 Single source of truth used by BOTH:
   - the offline regression tests (`tests/test_agent/test_llm_eval.py`, stubbed model), and

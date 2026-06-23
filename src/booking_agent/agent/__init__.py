@@ -1,4 +1,4 @@
-"""Conversational booking agent (F002).
+"""Conversational booking agent.
 
 A multi-agent team that carries a user from natural-language intent to a paid,
 ticketed booking — search → member → quote → seat map → atomic hold →

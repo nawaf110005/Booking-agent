@@ -1,6 +1,6 @@
 """Multi-agent orchestrator — the coordinator that drives the booking team.
 
-Replaces the old hand-coded state machine. One turn in, one structured reply out.
+One turn in, one structured reply out.
 The orchestrator:
 
   * parses intent, records sentiment, logs the NLU step (observability);
