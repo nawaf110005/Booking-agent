@@ -454,6 +454,23 @@ def test_yes_with_multiple_shows_asks_which_not_dead_end(seeded: Session) -> Non
     assert "active booking" not in r["reply"].lower()
 
 
+def test_change_of_mind_via_question_then_book_switches_event(seeded: Session) -> None:
+    """Regression: while on one event (pre-hold), asking about another city and then
+    affirming ('book it') switches to the just-discussed show — not the stale one."""
+    from booking_agent.tools.events import get_event_details
+
+    st = _state()
+    respond(seeded, st, "Riyadh Derby")
+    assert get_event_details(seeded, st.event_id).city == "Riyadh"
+
+    respond(seeded, st, "i changed my mind, what is in jeddah?")   # concierge records Jeddah show
+    assert st.pending_event_ids                                    # candidate remembered (pre-hold)
+
+    r = respond(seeded, st, "sound good, book it")
+    assert get_event_details(seeded, st.event_id).city == "Jeddah"  # switched, not the Derby
+    assert r["step"] == S.NEED_EMAIL
+
+
 def test_bare_yes_with_no_context_still_reports_no_booking(seeded: Session) -> None:
     """Guard: a bare 'yes' with nothing pending must not select anything — it still
     gives the no-active-booking message (the resolver never fires without candidates)."""

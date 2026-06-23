@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from booking_agent.agent import guardrails, observability
 from booking_agent.agent import state as S
 from booking_agent.agent.answer import answer_question
-from booking_agent.agent.extract import heuristic_extract
+from booking_agent.agent.extract import STRONG_ASK_KEYWORDS, heuristic_extract
 from booking_agent.agent.interests import (
     GENRE_LABELS,
     detect_interest,
@@ -135,11 +135,20 @@ def _converse(db: Session, state: ConversationState, params, message: str) -> di
     `_resolve_pending_event` on the next turn.
     """
     suggestions = _step_suggestions(state)
-    if state.event_id is None and params.event_query:
+    # Remember the show(s) being discussed — by name ("is Coldplay playing?") or by
+    # city ("what's in Jeddah?") — so a follow-up "yes"/"book it"/city can pick, or
+    # switch to, that show. Pre-hold only; skip pricing/policy FAQs that merely
+    # mention a city ("is parking free in Riyadh?").
+    low = (message or "").lower()
+    discovery_q = bool(params.event_query) or (
+        bool(params.city) and not any(k in low for k in STRONG_ASK_KEYWORDS)
+    )
+    if not state.hold_token and discovery_q:
         matches = search_events(db, params.event_query, params.city)
         if matches:
             state.pending_event_ids = [m.id for m in matches]
-            state.last_query = params.event_query
+            if params.event_query:
+                state.last_query = params.event_query
             cities = sorted({m.city for m in matches})
             if len(cities) > 1:
                 suggestions = cities
@@ -158,6 +167,12 @@ def _reset_booking(state: ConversationState) -> None:
 
 _CHANGE_WORDS = ("change", "edit", "modify", "different", "switch", "amend", "redo",
                  "wrong", "mistake", "instead", "swap", "adjust", "update")
+
+# Phrases that affirm "book the show we were just discussing" (beyond the bare
+# confirm words) — used only to pick a *pending* event, never at the payment gate.
+_BOOK_AFFIRM = ("book it", "book that", "book this", "sounds good", "sound good",
+                "let's do it", "lets do it", "go with", "that one", "that works",
+                "looks good", "do it")
 
 
 def _is_change_request(message: str) -> bool:
@@ -435,11 +450,11 @@ def _resolve_pending_event(db: Session, state: ConversationState, params, messag
         return None
 
     city = (params.city or "").strip().lower()
+    affirm = params.intent == "confirm" or any(w in (message or "").lower() for w in _BOOK_AFFIRM)
     if city:
         narrowed = [e for e in candidates if city in e.city.lower()]
         if len(narrowed) == 1:
-            state.event_id = narrowed[0].id
-            state.pending_event_ids = []
+            _switch_to(state, narrowed[0].id, params)  # picks/switches; clears downstream slots
             return _run_booking(db, state, params, message, _brain(state, params))
         if narrowed:                                   # still several in that city
             state.pending_event_ids = [e.id for e in narrowed]
@@ -451,10 +466,9 @@ def _resolve_pending_event(db: Session, state: ConversationState, params, messag
         state.pending_event_ids = []
         return None                                    # city not among them → normal flow
 
-    if params.intent == "confirm":                     # bare "yes" / "sure"
+    if affirm:                                         # "yes" / "sure" / "book it" / "sounds good"
         if len(candidates) == 1:
-            state.event_id = candidates[0].id
-            state.pending_event_ids = []
+            _switch_to(state, candidates[0].id, params)
             return _run_booking(db, state, params, message, _brain(state, params))
         state.step = S.EVENT_SELECTION                 # ambiguous → ask which
         return make_payload(
@@ -511,11 +525,13 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
             )
         # Neither a yes nor a no → treat this turn as a fresh request (fall through).
 
-    # --- Resolve a pending event suggestion: a city ("jeddah") or "yes" picks a
-    #     previously-presented show and advances the booking. Guarded to no chosen
-    #     event and not the confirm gate, so "yes" can never skip the HITL confirm. -
-    if (state.pending_event_ids and state.event_id is None
-            and state.step != S.AWAITING_CONFIRMATION):
+    # --- Resolve a pending event suggestion: a city ("jeddah"), "yes", or "book it"
+    #     picks — or switches to — a just-discussed show and advances the booking.
+    #     Pre-hold and pre-seat phases only, so it can never skip the HITL confirm
+    #     gate or disturb held seats. ---------------------------------------------- #
+    if (state.pending_event_ids and not state.hold_token
+            and state.step in (S.GREETING, S.EVENT_SELECTION, S.NEED_EMAIL,
+                               S.CATEGORY_SELECTION, S.NEED_QUANTITY)):
         resolved = _resolve_pending_event(db, state, params, message)
         if resolved is not None:
             return resolved
