@@ -155,8 +155,8 @@
   }
 }
 
-.particle,
-.point {
+.gooey-nav-container .particle,
+.gooey-nav-container .point {
   display: block;
   opacity: 0;
   width: 20px;
@@ -165,7 +165,7 @@
   transform-origin: center;
 }
 
-.particle {
+.gooey-nav-container .particle {
   --time: 5s;
   position: absolute;
   top: calc(50% - 8px);
@@ -173,7 +173,7 @@
   animation: particle calc(var(--time)) ease 1 -350ms;
 }
 
-.point {
+.gooey-nav-container .point {
   background: var(--color);
   opacity: 1;
   animation: point calc(var(--time)) ease 1 -350ms;
