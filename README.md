@@ -9,7 +9,7 @@ This project was built as a Capstone for the **Agentic AI Bootcamp**.
 ## 🛠️ Technology Stack
 *   **Backend**: Python 3.11 · FastAPI · SQLAlchemy 2 · Pydantic
 *   **Database**: SQLite (default local) / PostgreSQL-compatible
-*   **Frontend**: Next.js 14 + Tailwind CSS (primary UI) · FastAPI Static Server (fallback UI)
+*   **Frontend**: Next.js 14 + Tailwind CSS
 *   **NLU / AI**: Multi-agent specialists driven by an LLM (provider-agnostic — Anthropic / OpenAI / Gemini / nano-gpt; active: nano-gpt serving `gemini-2.5-flash-preview-04-17`), with a deterministic Offline Brain fallback when no key is set
 *   **Utilities**: Pillow (dynamic seatmap rendering) · HMAC (secure ticket QR signing)
 
@@ -39,7 +39,7 @@ Once started, open your browser and navigate to **http://localhost:3000** (or ht
     ```bash
     uv venv --python 3.11
     source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
-    uv pip install -e ".[dev,api,ui,llm]"
+    uv pip install -e ".[dev,api,llm]"
     ```
 2.  **Initialize and Seed the Database**:
     ```bash
@@ -63,7 +63,7 @@ Once started, open your browser and navigate to **http://localhost:3000** (or ht
 
 Tazkara is structured as a modular 4-tier system:
 
-1.  **Frontend (Next.js / HTML)**: Handles chat renders, interactive seatmaps, and ticket display.
+1.  **Frontend (Next.js)**: Handles chat renders, interactive seatmaps, and ticket display.
 2.  **API Layer (FastAPI)**: Routes chats, manages session IDs, and translates domain-level errors to standard HTTP response codes.
 3.  **Agent Layer (Multi-Agent Orchestrator)**: An orchestrator routes each turn through role-based specialists — catalog → membership → pricing → seating — each an LLM tool-calling loop over its own tools (`multi_agent` mode, default; `tool_agent` runs a single full-tool loop instead). With no provider key the specialists run on a deterministic offline brain, so the demo and tests work offline.
 4.  **Tools Layer (Python Functions)**: Pure, isolated business logic for bookings, holds, pricing calculations, and seat releases.
@@ -94,7 +94,7 @@ Tazkara follows a strict set of 8 governing rules defined in [.specify/memory/co
 To execute tests, check test coverage, or lint the codebase:
 
 ```bash
-# Run full offline test suite (~161 tests)
+# Run full offline test suite (181 tests)
 ./run.sh test
 
 # View test coverage (target gate: 85%+)

@@ -1,6 +1,6 @@
 # Booking-Agent launcher (Windows).
 #   .\run.ps1 full       # backend (:8000) + Next.js frontend (:3000/:3001)  ← recommended
-#   .\run.ps1 web        # backend only; built-in static site on http://localhost:8000
+#   .\run.ps1 web        # backend API only on http://localhost:8000 (docs at /docs)
 #   .\run.ps1 frontend   # Next.js dev server only (needs backend running)
 #   .\run.ps1 setup      # install deps + seed the demo catalog
 #   .\run.ps1 test       # run the test suite
@@ -11,7 +11,7 @@ $root = $PSScriptRoot
 
 function Setup {
     if (-not (Test-Path "$root\.venv")) { uv --directory "$root" venv --python 3.11 }
-    uv --directory "$root" pip install -e ".[dev,api,ui,llm]"
+    uv --directory "$root" pip install -e ".[dev,api,llm]"
     uv --directory "$root" run booking-agent init-db
     uv --directory "$root" run booking-agent seed
 }
@@ -28,7 +28,7 @@ switch ($cmd) {
         Setup
         Write-Host ""
         Write-Host "  ===============================================" -ForegroundColor Magenta
-        Write-Host "   Open  http://localhost:8000   (click 'Book with AI')" -ForegroundColor Green
+        Write-Host "   Backend API on  http://localhost:8000   (docs at /docs)" -ForegroundColor Green
         Write-Host "  ===============================================" -ForegroundColor Magenta
         Write-Host ""
         uv --directory "$root" run uvicorn booking_agent.api.app:app --reload --reload-dir "$root\src" --port 8000

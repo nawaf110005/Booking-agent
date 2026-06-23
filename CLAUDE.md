@@ -19,15 +19,15 @@ Tooling is [`uv`](https://github.com/astral-sh/uv). The `run.sh` (macOS/Linux) a
 `run.ps1` (Windows) launchers wrap the common flows.
 
 ```bash
-./run.sh setup          # uv venv + install .[dev,api,ui,llm] + init-db + seed
+./run.sh setup          # uv venv + install .[dev,api,llm] + init-db + seed
 ./run.sh full           # backend :8000 + Next.js :3000 (recommended demo)
-./run.sh web            # backend only; serves the static site at :8000
+./run.sh web            # backend API only at :8000 (docs at /docs)
 ./run.sh test           # pytest -q
 ./run.sh fresh          # wipe booking.db and re-seed (resets sold seats)
 
 # Direct equivalents
-uv run pytest                                   # full suite (~161 tests)
-uv run pytest tests/test_agent/test_policy_flow.py            # one file
+uv run pytest                                   # full suite (181 tests)
+uv run pytest tests/test_agent/test_orchestrator_flow.py      # one file
 uv run pytest tests/test_tools/test_holds.py::test_name -q    # one test
 uv run pytest --cov                             # coverage (fail_under = 85)
 uv run ruff check src tests                     # lint
@@ -95,8 +95,7 @@ heuristic's strong intents win. The booking *actions* are driven by the speciali
 tool calls, not by slot extraction. `agent/payloads.py` is the shared presentation
 layer (event cards, quote, seat map, confirmation). Other LLM-touched concerns are
 isolated modules: `compose.py` (reply rephrasing), `answer.py` (Q&A / chit-chat),
-`sentiment.py`, `interests.py`, `rag.py`, `judge.py`. `graph.py` exposes the
-LangGraph-shaped adapter + recommender used by the Week-5 multi-agent surface.
+`sentiment.py`, `interests.py`, `rag.py` (keyword venue-FAQ retrieval).
 
 ### Money is always exact (Constitution IV)
 All amounts are **integer halalas** (1 SAR = 100 halalas); percentages are
@@ -120,9 +119,8 @@ are a typed hierarchy in `tools/errors.py` (`NotFoundError`, `SeatUnavailableErr
 ### API (`api/`)
 `api/app.py:create_app()` mounts `/v1` routers (`health`, `chat`, `events`,
 `quote`, `holds`, `pay`) and maps the tool-error hierarchy to HTTP codes
-(404/409/422/400). The Next.js storefront (`frontend/`, primary) and a no-Node
-static site (`web/static`, served at `/`) both consume the same `/v1` API; the
-chat endpoint returns the `AgentResponse` shape from `agent/responses.py`.
+(404/409/422/400). The Next.js storefront (`frontend/`) consumes the `/v1` API;
+the chat endpoint returns the `AgentResponse` shape from `agent/responses.py`.
 
 ### Persistence (`db/`)
 SQLAlchemy 2 models in `db/models.py` (13 tables: events/venues/seats/members/
