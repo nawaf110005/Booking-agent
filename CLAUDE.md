@@ -10,8 +10,7 @@ tickets in Saudi Arabia. One conversation carries a user through:
 seat map → atomic 10-min hold → HITL confirmation → payment → signed QR ticket.**
 
 Python 3.11 backend (FastAPI + SQLAlchemy 2 + Typer CLI), Next.js 14 frontend,
-SQLite by default (Postgres-compatible). Built with [spec-kit](https://github.com/github/spec-kit);
-features are sliced F001–F008 under `specs/`.
+SQLite by default (Postgres-compatible).
 
 ## Commands
 
@@ -147,12 +146,6 @@ migration `migrations/versions/0001_initial.py` builds the full schema;
   call bounded by `llm_timeout_seconds` so a slow provider fails fast.
 - **Ruff** line-length is 100 but `E501` is ignored; non-ASCII display glyphs
   (×, —, arrows, Arabic) are intentional and the relevant RUF rules are disabled.
-- **Constitution** (`.specify/memory/constitution.md`) defines 8 governing
-  principles; the non-negotiables (I: confirm before payment, II: atomic holds)
-  are enforced in code via `agent/guardrails.py` and `tools/holds.py`. Don't
-  weaken those gates.
-
-<!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
-<!-- SPECKIT END -->
+- **Governing principles**: the design follows a few non-negotiables — most
+  importantly *confirm before payment* and *atomic seat holds* — enforced in code
+  via `agent/guardrails.py` and `tools/holds.py`. Don't weaken those gates.

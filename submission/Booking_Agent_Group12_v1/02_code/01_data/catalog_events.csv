@@ -1,7 +1,0 @@
-id,title,starts_at,venue,city,capacity,status,detail_url
-6,Riyadh Comedy Night,2026-06-26T21:00:00,Bujairi Terrace,Riyadh,5000,scheduled,https://example.com/events/comedy-night
-3,Al-Hilal vs Al-Nassr — Riyadh Derby,2026-07-03T11:13:47.292498,Kingdom Arena,Riyadh,22000,scheduled,https://example.com/events/riyadh-derby
-4,LEAP Tech Conference,2026-07-13T11:13:47.292498,Bujairi Terrace,Riyadh,5000,scheduled,https://example.com/events/leap
-1,Coldplay — Music of the Spheres,2026-07-23T11:13:47.292498,Kingdom Arena,Riyadh,22000,scheduled,https://example.com/events/coldplay-riyadh
-2,Coldplay — Music of the Spheres,2026-08-07T11:13:47.292498,Jeddah Superdome,Jeddah,12000,scheduled,https://example.com/events/coldplay-jeddah
-5,MDLBEAST Soundstorm,2026-08-22T11:13:47.292498,Kingdom Arena,Riyadh,22000,scheduled,https://example.com/events/soundstorm

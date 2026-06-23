@@ -76,8 +76,8 @@ GREETING ➔ EVENT_SELECTION ➔ NEED_EMAIL ➔ CATEGORY_SELECTION ➔ NEED_QUAN
 
 ---
 
-## 🔒 Constitutional Principles
-Tazkara follows a strict set of 8 governing rules defined in [.specify/memory/constitution.md](.specify/memory/constitution.md):
+## 🔒 Governing Principles
+Tazkara follows a strict set of 8 governing rules:
 *   **I. Confirmation Before Payment**: Explicit HITL invoice gate before any payment session is initialized.
 *   **II. Atomic Holds**: All-or-nothing seat holds with a strict 10-minute timeout to prevent double-booking.
 *   **III. Repos-as-Tools**: No external ticketing APIs; all capabilities are native Python functions.
