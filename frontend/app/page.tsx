@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Chat from "@/components/Chat";
+import DarkVeil from "@/components/DarkVeil";
+import LogoLoop from "@/components/LogoLoop";
+import RotatingText from "@/components/RotatingText";
 import { health } from "@/lib/api";
 
 const STEPS = [
@@ -39,6 +42,17 @@ const DEMO = [
 ];
 
 const VIBES = ["Concerts", "Sports", "Comedy", "Theatre", "Festivals", "Conferences"];
+
+// Category strip rendered by the LogoLoop marquee.
+const VIBE_LOGOS = VIBES.map((v) => ({
+  node: (
+    <span className="flex items-center gap-3 font-extrabold uppercase tracking-[0.06em] text-muted">
+      {v}
+      <span className="text-brand-mid">✦</span>
+    </span>
+  ),
+  title: v,
+}));
 
 export default function Home() {
   const [aiActive, setAiActive] = useState(false);
@@ -161,19 +175,32 @@ export default function Home() {
 
       {/* Hero */}
       <header className="relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-6 text-center">
-        <div className="hero-aurora">
-          <span className="blob blob-1" />
-          <span className="blob blob-2" />
-          <span className="blob blob-3" />
+        {/* Animated WebGL backdrop */}
+        <div className="absolute inset-0 z-0">
+          <DarkVeil hueShift={28} speed={0.4} warpAmount={0.08} noiseIntensity={0.02} />
         </div>
+        {/* Legibility overlay over the veil */}
+        <div className="absolute inset-0 z-0 bg-gradient-to-b from-bg/55 via-bg/35 to-bg/85" />
         <div id="particles" className="particles" />
 
         <div className="relative z-10 max-w-3xl">
           <span className="reveal inline-block rounded-full border border-line px-3 py-1 text-xs uppercase tracking-widest text-white/70">
             🎫 AI-Powered Ticketing · Saudi Arabia
           </span>
-          <h1 className="reveal mt-6 text-5xl font-extrabold leading-[1.05] md:text-7xl">
-            Book live events <span className="grad-anim">in one chat.</span>
+          <h1 className="reveal mt-6 flex flex-wrap items-baseline justify-center gap-x-3 text-5xl font-extrabold leading-[1.05] md:text-7xl">
+            <span>Book live events in one</span>
+            <RotatingText
+              texts={["chat.", "click.", "message.", "minute."]}
+              elementLevelClassName="grad-anim"
+              splitLevelClassName="overflow-hidden pb-2"
+              staggerFrom="last"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "-120%" }}
+              staggerDuration={0.02}
+              transition={{ type: "spring", damping: 30, stiffness: 400 }}
+              rotationInterval={2200}
+            />
           </h1>
           <p className="reveal mx-auto mt-5 max-w-xl text-lg text-white/70">
             From “I want a ticket” to a QR ticket in your inbox — no forms, no five-step
@@ -198,15 +225,17 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="marquee relative z-10 mt-12 w-full border-y border-line py-4">
-          <div className="marquee-track">
-            {[...VIBES, ...VIBES].map((v, i) => (
-              <span key={i}>
-                {v}
-                <span aria-hidden className="px-4 text-brand-purple">✦</span>
-              </span>
-            ))}
-          </div>
+        <div className="relative z-10 mt-12 w-full border-y border-line bg-bg/50 py-4 backdrop-blur-sm">
+          <LogoLoop
+            logos={VIBE_LOGOS}
+            speed={50}
+            direction="left"
+            logoHeight={20}
+            gap={36}
+            fadeOut
+            fadeOutColor="#0b0b0f"
+            ariaLabel="Event categories"
+          />
         </div>
         <div className="scroll-cue absolute bottom-5"><span /></div>
       </header>
