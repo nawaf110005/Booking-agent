@@ -58,3 +58,17 @@ def test_booking_inputs_are_not_ask() -> None:
     assert heuristic_extract("gold").intent != "ask"
     assert heuristic_extract("G3, G4").intent != "ask"
     assert heuristic_extract("what's on this weekend?").intent == "browse"
+
+
+# --- Fuzzy / typo'd event resolution (FR-001) --------------------------------
+
+def test_fuzzy_event_spacing_and_typos() -> None:
+    assert heuristic_extract("dose cold play will be here in saudi").event_query == "coldplay"
+    assert heuristic_extract("coldpaly tickets").event_query == "coldplay"
+    assert heuristic_extract("is derbi happening?").event_query == "derby"
+
+
+def test_fuzzy_does_not_false_match_categories() -> None:
+    # category-only / unrelated words must NOT be coerced into an event query
+    assert heuristic_extract("i want gold vip").event_query is None
+    assert heuristic_extract("silver please").event_query is None

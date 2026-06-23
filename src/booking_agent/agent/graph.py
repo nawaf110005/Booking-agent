@@ -10,7 +10,7 @@ could build a real StateGraph; the dependency-free shim below has the same
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from booking_agent.agent import handle
 

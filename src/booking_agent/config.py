@@ -20,18 +20,28 @@ class Settings(BaseSettings):
     database_url: str = Field(default=f"sqlite:///{PROJECT_ROOT / 'booking.db'}")
     log_level: str = Field(default="INFO")
 
-    # LLM (F002). Provider: anthropic | openai | nanogpt (OpenAI-compatible proxy).
+    # LLM (F002). Provider: anthropic | openai | nanogpt | google (Gemini, via its
+    # OpenAI-compatible endpoint). nanogpt/google reuse the OpenAI SDK + a base_url.
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     nanogpt_api_key: str = ""
+    google_api_key: str = ""
     booking_agent_provider: str = Field(default="anthropic")
     booking_agent_model: str = Field(default="claude-sonnet-4-6")
-    # When true (and a key is set), reply prose is rephrased by the LLM per turn
-    # — warmer/varied wording, identical facts. On by default so the chat reads
-    # naturally; set false for fixed, deterministic templates.
-    booking_agent_dynamic_replies: bool = Field(default=True)
-    # Agent architecture: "fsm" (deterministic MVP) | "tool_agent" (LLM tool-calling).
-    booking_agent_mode: str = Field(default="fsm")
+    # When true (and a key is set), plain-text reply prose is rephrased by the LLM
+    # for warmer wording. OFF by default: rephrasing a sparse confirmation/payment
+    # label can make the model invent booking details (wrong seats/price/email), so
+    # deterministic templates are safer. Replies that carry structured data
+    # (confirmation/payment/quote/categories/…) are NEVER rephrased, regardless.
+    booking_agent_dynamic_replies: bool = Field(default=False)
+    # Agent architecture: "multi_agent" (orchestrator + role specialists, default)
+    # | "tool_agent" (single LLM tool-calling loop). Both run the deterministic
+    # offline brain when no provider key is set.
+    booking_agent_mode: str = Field(default="multi_agent")
+    # Persist conversation sessions to disk so an in-progress booking survives a
+    # backend restart (otherwise the in-memory store is wiped and the chat "starts
+    # over"). Disabled in tests so they don't write files.
+    booking_agent_persist_sessions: bool = Field(default=True)
     # Hard cap (seconds) on any single LLM call, so a slow/unreachable provider
     # fails fast and the agent falls back instead of hanging.
     llm_timeout_seconds: float = Field(default=20.0)
@@ -41,10 +51,12 @@ class Settings(BaseSettings):
     vat_rate: float = Field(default=0.15)
     currency: str = Field(default="SAR")
 
-    # Payments (F003)
-    payment_gateway: str = Field(default="fake")  # fake | moyasar
-    moyasar_secret_key: str = ""
-    moyasar_webhook_secret: str = ""
+    # Payments — virtual (fake) gateway only: completes the booking offline and
+    # issues the QR ticket, no external provider.
+    payment_gateway: str = Field(default="fake")  # fake (virtual checkout)
+    # --- Moyasar provider disabled for now (kept commented for a future F003 swap). ---
+    # moyasar_secret_key: str = ""
+    # moyasar_webhook_secret: str = ""
 
     # Ticket signing (F003) — HMAC key for the QR token.
     ticket_hmac_key: str = Field(default="dev-insecure-change-me")
@@ -83,6 +95,8 @@ class Settings(BaseSettings):
             return self.nanogpt_api_key or self.openai_api_key
         if provider == "openai":
             return self.openai_api_key
+        if provider in {"google", "gemini"}:
+            return self.google_api_key
         return self.anthropic_api_key
 
     @property

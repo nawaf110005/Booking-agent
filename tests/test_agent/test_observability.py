@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from booking_agent.agent import observability as obs
 from booking_agent.agent import state as S
-from booking_agent.agent.policy import respond
+from booking_agent.agent.orchestrator import respond
 from booking_agent.agent.state import ConversationState
 
 

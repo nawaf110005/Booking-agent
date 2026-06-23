@@ -62,7 +62,10 @@ def test_pay_is_idempotent(client: TestClient) -> None:
     assert first["booking_id"] == second["booking_id"] == booking_id
 
 
-def test_website_is_served(client: TestClient) -> None:
+def test_root_points_to_the_api(client: TestClient) -> None:
+    # API-only backend now (the UI lives on the Next.js app at :3000).
     r = client.get("/")
     assert r.status_code == 200
-    assert "booking agent" in r.text.lower()
+    body = r.json()
+    assert body["api"] == "/v1"
+    assert "3000" in body["ui"]

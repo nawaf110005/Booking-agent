@@ -28,4 +28,6 @@ def create_session() -> SessionOut:
 @router.post("/chat", response_model=AgentResponse)
 def chat(body: ChatIn, db: Session = Depends(get_db)) -> dict:
     state = SESSION_STORE.get_or_create(body.session_id)
-    return handle(db, state, body.message)
+    result = handle(db, state, body.message)
+    SESSION_STORE.save(state)  # persist so the flow survives a backend restart
+    return result

@@ -1,9 +1,10 @@
-"""End-to-end smoke of the *agent loop* (no API key, no network).
+"""End-to-end smoke of the *multi-agent orchestrator* (no API key, no network).
 
-Drives `policy.respond` through a full booking — search → member → quote → seat
-map → atomic hold → HITL confirm → pay → ticket — then prints the observable
-reasoning trace (tool calls + state transitions, PII redacted). Handy as a demo
-and as a quick regression check after touching the agent.
+Drives `orchestrator.respond` through a full booking — search → member → quote →
+seat map → atomic hold → HITL confirm → pay → ticket — with the deterministic
+offline brain, then prints the observable reasoning trace (tool calls per
+specialist + state transitions, PII redacted). Handy as a demo and as a quick
+regression check after touching the agent.
 
 Run:  python scripts/agent_smoke.py
 """
@@ -22,8 +23,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from booking_agent.agent import observability as obs
-from booking_agent.agent.policy import respond
+from booking_agent.agent import orchestrator
+from booking_agent.agent.orchestrator import respond
 from booking_agent.agent.state import ConversationState
+
+# This is the no-network demo: force the deterministic offline brain even if a
+# provider key is present in .env (with a key, the same flow runs on the real LLM).
+orchestrator.llm_available = lambda: False
 from booking_agent.db import models  # noqa: F401
 from booking_agent.db.base import Base
 from booking_agent.db.seed import seed_demo

@@ -36,10 +36,14 @@ refactor (analysis Tier 2) stays deferred until decided.
 | 14 | **Typed `AgentResponse`** (response_type discriminator) at the API boundary | FR-010 | ✅ built + tested · pending commit |
 | 15 | **LLM-as-judge** scorer for free-text replies | W2 | ✅ built + tested · pending commit |
 | 16 | **Orchestration** — LangGraph-style adapter + planner + multi-agent router (recommender + booking) | FR-014 / W5 | ✅ built + tested · pending commit |
+| **2·P2** | **Delete the FSM; multi-agent orchestrator + role specialists** (catalog → membership → pricing → seating; offline brain; `multi_agent` default) | W5 Multi-agent | ✅ built + tested (161, ~89%) · pending commit |
 
 **Suite: 143 passing.** Every named course gap is now implemented and tested
 (see the gap-closure table below). Remaining work is production-hardening of the
 in-memory stores (Redis/vector DB) and grading tool-agent mode on the live model.
+
+> **Update:** superseded by **Increment 2 (Phase 2)** below — the FSM was removed and a
+> multi-agent orchestrator is now the default. Suite is now **161 passing, ~89% coverage**.
 
 ## Gap closure (vs. COURSE_GAP_ANALYSIS.md)
 
@@ -57,10 +61,17 @@ in-memory stores (Redis/vector DB) and grading tool-agent mode on the live model
 | Loop prevention (W5) | `tool_agent.py` (step cap) | ✅ |
 | Planning / task decomposition (W5) | `graph.py` (`plan_booking`) | ✅ |
 | Multi-agent orchestration + LangGraph stub (FR-014, W5) | `graph.py` (`MultiAgentGraph`, `AgentGraph`) | ✅ (demo-grade) |
-| Dynamic, conversational, personalised UX | `compose.py`, `answer.py`, `policy.py` | ✅ | Runtime smokes: `scripts/agent_smoke.py` (FSM) and the
+| Dynamic, conversational, personalised UX | `compose.py`, `answer.py`, `policy.py` | ✅ |
+
+Runtime smokes: `scripts/agent_smoke.py` (FSM) and the
 tool-agent loop both book a ticket and print the observable-reasoning trace with PII
 redacted. Tool-agent mode is opt-in via `BOOKING_AGENT_MODE=tool_agent`; FSM stays the
 default so the MVP can't regress (Constitution VIII).
+
+> **Update:** superseded by **Increment 2 (Phase 2)** below. `policy.py` (the FSM) was
+> deleted; its deterministic logic moved into `agent/offline_brain.py`. The default mode is
+> now `multi_agent` (orchestrator + role specialists); `tool_agent` is the single-agent
+> alternative. `scripts/agent_smoke.py` now drives the multi-agent path on the offline brain.
 
 ## Changelog
 
@@ -117,3 +128,31 @@ default so the MVP can't regress (Constitution VIII).
   tool-agent mode — lets the model drive tools in a ReAct loop behind a code-enforced
   payment gate. Remaining is production-hardening (Redis/vector DB instead of in-memory
   stores) and tuning tool-agent mode against the live model.
+
+### 2026-06-23
+
+- **Increment 2 (Phase 2) — Delete the FSM; build the multi-agent orchestrator + role
+  specialists.** The big architectural pivot: the slot-filling state machine is gone and a
+  real multi-agent system is the default.
+  - **Deleted `agent/policy.py`** — the ~730-line FSM where the LLM only extracted slots and
+    hand-coded `if` branches did all the deciding. It's no longer in the codebase.
+  - **Added the multi-agent stack:** `agent/orchestrator.py` (routes each turn through the
+    specialists in booking order and hands off as each phase completes), `agent/specialists.py`
+    (the **catalog → membership → pricing → seating** role specialists — each an LLM
+    Reason–Act–Observe tool loop restricted to *only* its own tools), `agent/offline_brain.py`
+    (the deterministic no-key brain — the FSM's logic survives here as a *model the agent
+    calls*, not the agent itself), and `agent/payloads.py` (shared presentation/payload
+    shaping across specialists).
+  - **Default mode flipped `fsm` → `multi_agent`** in `config.py`. `tool_agent` (one agent,
+    full tool set) is kept as a single-agent alternative for comparison.
+  - **Tests migrated:** the FSM tests were rewritten into `test_orchestrator_flow.py`; the
+    suite is now **161 passing, fully offline, ~89% coverage**.
+  - **Live provider switched** to nano-gpt serving `gemini-2.5-flash-preview-04-17` (a direct
+    Google hit kept hitting free-tier 429s; nano-gpt has its own quota). Verified the exact
+    model id + key with `scripts/nanogpt_check.py`. Still provider-agnostic
+    (`anthropic | openai | nanogpt | google`); no key → offline brain.
+  - **Safety unchanged.** Payment is **no specialist's tool** — the HITL gate
+    (`guardrails.can_issue_payment`, Constitution I) executes booking/payment in code only
+    after an explicit user confirm. Each specialist keeps its loop cap (loop prevention). The
+    PII-redacted observability trace now **tags each tool call with the specialist that made
+    it** (catalog / membership / pricing / seating).

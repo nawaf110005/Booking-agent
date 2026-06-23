@@ -49,3 +49,20 @@ def filter_by_interest(events: list[Any], interests: list[str]) -> list[Any]:
         return events
     picked = [e for e in events if event_genre(e.title, getattr(e, "description", None)) in interests]
     return picked or events
+
+
+# Human-friendly labels for the inferred genres (used when offering similar events
+# after an unknown-event request, e.g. "we don't have Justin Bieber, but here are concerts").
+GENRE_LABELS: dict[str, str] = {
+    "concert": "concerts",
+    "sports": "matches and sporting events",
+    "comedy": "comedy shows",
+    "conference": "tech conferences",
+    "theatre": "theatre shows",
+}
+
+
+def events_in_genre(events: list[Any], genre: str) -> list[Any]:
+    """Events whose inferred genre matches exactly (strict — no fall-back-to-all,
+    so an offer only fires when we genuinely have something in that genre)."""
+    return [e for e in events if event_genre(e.title, getattr(e, "description", None)) == genre]

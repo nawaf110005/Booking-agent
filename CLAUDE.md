@@ -26,7 +26,7 @@ Tooling is [`uv`](https://github.com/astral-sh/uv). The `run.sh` (macOS/Linux) a
 ./run.sh fresh          # wipe booking.db and re-seed (resets sold seats)
 
 # Direct equivalents
-uv run pytest                                   # full suite (~139 tests)
+uv run pytest                                   # full suite (~161 tests)
 uv run pytest tests/test_agent/test_policy_flow.py            # one file
 uv run pytest tests/test_tools/test_holds.py::test_name -q    # one test
 uv run pytest --cov                             # coverage (fail_under = 85)
@@ -60,32 +60,43 @@ API docs at `http://localhost:8000/docs`.
 Every chat turn enters through `agent/__init__.py:handle(db, state, message)`,
 which dispatches on `settings.booking_agent_mode`:
 
-- **`fsm` (default)** — `agent/policy.py:respond()` is a deterministic state
-  machine over the F001 tools. It extracts slots, advances as far as the message
-  allows, and asks for the first missing slot (event → email → category →
-  quantity → seats → confirm). This is the MVP and what every test exercises.
-- **`tool_agent`** — `agent/tool_agent.py:respond_with_tools()` is the genuinely
-  agentic path: an LLM Reason–Act–Observe loop where the model chooses tools
-  (`agent/tool_specs.py:dispatch`) with a `MAX_STEPS` loop-prevention cap.
-  Falls back to the FSM if no provider key is configured.
+- **`multi_agent` (default)** — `agent/orchestrator.py:respond()` coordinates a
+  team of **role-based specialists** (`agent/specialists.py`): catalog → membership
+  → pricing → seating. Each specialist is an LLM Reason–Act–Observe loop restricted
+  to *only* its own tools (`agent/tool_specs.py`); the orchestrator routes the turn
+  through them in booking order and hands off as each phase completes. Questions
+  route to a concierge (`answer.py`); discovery is deterministic presentation.
+- **`tool_agent`** — `agent/tool_agent.py:respond_with_tools()` is the single-agent
+  variant: one LLM loop with the *full* tool set instead of role specialists. Same
+  `MAX_STEPS`-style loop prevention; useful for comparison and tests.
 
-In **both** modes the dangerous action (creating the booking / issuing payment)
-is kept out of the model's reach and executed in code **only** after an explicit
-user "confirm" from the `AWAITING_CONFIRMATION` step — the non-negotiable
-human-in-the-loop gate (`agent/guardrails.py:can_issue_payment`).
+The specialists' "brain" — the injected `complete(messages, tools)` — is the real
+LLM (`tool_agent.default_complete`) when a provider key is set, else the
+deterministic `agent/offline_brain.py` so the demo and the **entire test suite run
+offline** with no network. Same agents, swappable brain. (There is **no** FSM: the
+old `policy.py` state machine was removed; its deterministic logic now lives in the
+offline brain, where it plays a *model* the agent loop calls, not the agent itself.)
+
+In **both** modes the dangerous action (creating the booking / issuing payment) is
+kept out of the model's reach — booking/payment is **no** specialist's tool — and
+executed in code **only** after an explicit user "confirm" from the
+`AWAITING_CONFIRMATION` step — the non-negotiable human-in-the-loop gate
+(`agent/guardrails.py:can_issue_payment`).
 
 `ConversationState` (`agent/state.py`) is per-session short-term memory; steps
 are the string constants in that module. Sessions live in an in-memory
 `SESSION_STORE` (`agent/store.py`) — not persisted across process restarts.
 
-### NLU: LLM with deterministic fallback
-`agent/llm.py:llm_extract()` calls the configured provider for slot extraction;
-`agent/extract.py:heuristic_extract()` is a pure rule-based fallback. The policy
-merges both but lets the heuristic's strong intents (ask/cancel/confirm) win.
-Other LLM-touched concerns are isolated modules: `compose.py` (reply rephrasing),
-`answer.py` (Q&A / chit-chat), `sentiment.py`, `interests.py`, `rag.py`,
-`judge.py`. `graph.py` is a dependency-free LangGraph-shaped shim reserved for
-the multi-agent stretch.
+### NLU + presentation
+`agent/llm.py:llm_extract()` calls the configured provider for slot extraction and
+`agent/extract.py:heuristic_extract()` is a pure rule-based fallback; the
+orchestrator merges both for intent routing (ask/cancel/confirm/browse) and lets the
+heuristic's strong intents win. The booking *actions* are driven by the specialists'
+tool calls, not by slot extraction. `agent/payloads.py` is the shared presentation
+layer (event cards, quote, seat map, confirmation). Other LLM-touched concerns are
+isolated modules: `compose.py` (reply rephrasing), `answer.py` (Q&A / chit-chat),
+`sentiment.py`, `interests.py`, `rag.py`, `judge.py`. `graph.py` exposes the
+LangGraph-shaped adapter + recommender used by the Week-5 multi-agent surface.
 
 ### Money is always exact (Constitution IV)
 All amounts are **integer halalas** (1 SAR = 100 halalas); percentages are
@@ -126,9 +137,9 @@ migration `migrations/versions/0001_initial.py` builds the full schema;
   import; downstream code imports the `settings` singleton. Tests override by
   constructing `Settings(...)` and patching the binding.
 - **Tests run fully offline.** `tests/conftest.py` has an autouse fixture that
-  forces `llm_available()` to `False` everywhere, so the suite exercises the
-  deterministic heuristic path regardless of keys in `.env`. Use the `seeded` /
-  `coldplay_riyadh_id` fixtures (in-memory SQLite via `StaticPool`).
+  forces `llm_available()` to `False` (patching `orchestrator.llm_available`), so the
+  specialists run on the deterministic offline brain regardless of keys in `.env`.
+  Use the `seeded` / `coldplay_riyadh_id` fixtures (in-memory SQLite via `StaticPool`).
 - **Test-first for data/money** (Constitution VI): money and seat-hold tools have
   tests before any agent wiring; TTL/expiry tests use `freezegun`.
 - **LLM provider** is set by `BOOKING_AGENT_PROVIDER` (`anthropic` | `openai` |

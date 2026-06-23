@@ -156,7 +156,7 @@ export default function Home() {
           <li><a href="#why" className="hover:text-white">Why Booking Agent</a></li>
           <li><a href="#demo" className="hover:text-white">See it</a></li>
         </ul>
-        <span className="rounded-full border border-line px-3 py-1 text-xs text-white/80">EN | ع</span>
+        <span className="rounded-full border border-line px-3 py-1 text-xs text-white/80">EN</span>
       </nav>
 
       {/* Hero */}

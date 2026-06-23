@@ -11,7 +11,8 @@ Two safety properties (Week 4 *Autonomy Limits and Guardrails*; Constitution I):
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -159,5 +160,5 @@ def dispatch(db: Session, state: ConversationState, name: str, args: dict) -> di
         return fn(db, state, args or {})
     except (CapExceededError, SeatUnavailableError, ToolError) as exc:
         return {"error": str(exc)}
-    except Exception as exc:  # noqa: BLE001 — surface as a tool error the model can recover from
+    except Exception as exc:
         return {"error": f"{type(exc).__name__}: {exc}"}

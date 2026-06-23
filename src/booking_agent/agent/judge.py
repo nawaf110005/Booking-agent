@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Callable
+from collections.abc import Callable
 
 JUDGE_SYSTEM = (
     "You are a strict evaluator of a ticket-booking assistant. Score the assistant "
@@ -26,7 +26,7 @@ def judge_reply(question: str, reply: str, criteria: str,
     user = f"QUESTION: {question}\nREPLY: {reply}\nCRITERIA: {criteria}"
     try:
         raw = complete(JUDGE_SYSTEM, user)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"score": 0, "reason": f"judge error: {type(exc).__name__}"}
     match = re.search(r"\{.*\}", raw or "", re.DOTALL)
     if not match:

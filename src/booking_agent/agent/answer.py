@@ -40,21 +40,31 @@ MEMBERSHIP = (
 )
 CATEGORIES = "Seat categories vary per event: VIP, Gold, Silver, and Standing."
 PAYMENT = (
-    "Payment goes through Moyasar — a sandbox for this demo, so no real charge — "
-    "with Mada / Apple Pay / STC Pay planned. Tickets are PDFs carrying an "
-    "HMAC-signed QR code."
+    "Payment is a secure virtual checkout — a sandbox in this demo, so no real "
+    "charge. You always confirm the full total before anything is paid, then you "
+    "get a PDF ticket with an HMAC-signed QR code."
 )
-LANGUAGES = "You can chat in Arabic or English."
+DELIVERY = (
+    "Ticket delivery: this demo does NOT email, text, or WhatsApp tickets. After paying "
+    "you download your QR ticket right here in the chat (it's HMAC-signed and tied to your "
+    "booking). Email/SMS delivery is planned but not available yet — never promise to send it."
+)
+LANGUAGES = "You can chat with me in English."
 
 _ANSWER_SYSTEM = (
     "You are Booking Agent, a warm, witty event-ticketing concierge for live events in "
-    "Saudi Arabia. Talk like a helpful friend, not a form: greet back, make a little "
-    "small talk, give honest opinions and recommendations when asked (e.g. which seat "
+    "Saudi Arabia. Talk like a helpful friend, not a form: greet back ONLY when the "
+    "CONTEXT says the conversation is just starting — once it is already in progress, do "
+    "NOT re-introduce yourself or repeat a greeting; just answer and keep things moving. "
+    "Make a little small talk, give honest opinions and recommendations when asked (e.g. which seat "
     "category is best value, what's fun this weekend), and answer questions about "
     "events, prices, membership, payment, and how booking works — using ONLY the facts "
     "and live catalog provided. "
     "PERSONALISE: if the CONTEXT below gives the user's name or membership tier, use "
-    "them naturally (e.g. 'Sure, Nawaf —'). "
+    "them naturally (e.g. 'Sure, Nawaf —'). NEVER build or guess a name from the user's "
+    "email address — e.g. if they write 'nawaf@gmail.com', do NOT greet them as 'Nawaf "
+    "Gmail' or 'nawaf gmail'. Only use the name given in CONTEXT; if none is given, use "
+    "no name at all. "
     "Be concise (1-3 sentences), friendly and specific. You're in the middle of helping "
     "them book: after you answer, gently nudge toward the next step shown in CONTEXT "
     "(share an email, pick a category, choose seats, confirm) — invite, don't pester. "
@@ -81,7 +91,8 @@ def _catalog_brief(db: Session) -> str:
 
 def _facts(db: Session) -> str:
     return "\n\n".join(
-        [ABOUT, HOW_IT_WORKS, MEMBERSHIP, CATEGORIES, PAYMENT, LANGUAGES, "Live catalog:\n" + _catalog_brief(db)]
+        [ABOUT, HOW_IT_WORKS, MEMBERSHIP, CATEGORIES, PAYMENT, DELIVERY, LANGUAGES,
+         "Live catalog:\n" + _catalog_brief(db)]
     )
 
 
@@ -104,10 +115,17 @@ def _event_detail(db: Session, event_id: int) -> str | None:
 
 
 def _context_block(ctx: dict) -> str:
+    in_progress = ctx.get("turn", 0) > 1
+    convo = (
+        "already in progress — do NOT re-introduce yourself or repeat a greeting; just answer and continue"
+        if in_progress
+        else "just starting — a brief greeting is fine"
+    )
     return (
         f"User name: {ctx.get('name') or 'unknown yet'}\n"
         f"Membership: {ctx.get('tier_label') or 'not identified yet'}\n"
         f"Current booking step: {ctx.get('step') or 'just starting'}\n"
+        f"Conversation: {convo}\n"
         f"Next thing to get from them: {ctx.get('needs') or 'help them pick an event'}"
     )
 
@@ -150,13 +168,13 @@ def _rule_based_answer(db: Session, message: str, current: str | None = None) ->
         return any(w in low for w in words)
 
     first = low.strip().split()[0] if low.strip() else ""
-    if first in {"hi", "hey", "hello", "yo", "salam", "hala", "هلا", "اهلا", "مرحبا", "سلام"} or has(
+    if first in {"hi", "hey", "hello", "yo"} or has(
         "good morning", "good evening", "good afternoon"
     ):
         return "Hey! I'm Booking Agent 🎫 — I find live events and book tickets. What are you in the mood for?"
-    if has("thank", "thanks", "thx", "شكرا"):
+    if has("thank", "thanks", "thx"):
         return "Anytime! Want to find an event or check your member discount?"
-    if has("how are you", "how r u", "how are u", "how's it going", "what's up", "whats up", "كيفك"):
+    if has("how are you", "how r u", "how are u", "how's it going", "what's up", "whats up"):
         return "Doing great and ready to get you tickets! What would you like to see?"
 
     if current and has(
@@ -170,15 +188,18 @@ def _rule_based_answer(db: Session, message: str, current: str | None = None) ->
         return MEMBERSHIP + " Share your email and I'll apply your tier."
     if has("who", "made", "built", "implement", "created", "developed", "about you", "what are you"):
         return ABOUT
+    if (has("email", "mail", "send", "deliver", "forward", "whatsapp", "sms", "text")
+            and has("ticket", "qr", "it", "copy", "receipt")):
+        return DELIVERY
+    if has("pay", "payment", "mada", "apple pay", "stc", "card"):  # before "how" so "how do i pay" → payment
+        return PAYMENT
     if has("how", "work", "steps", "process"):
         return HOW_IT_WORKS
     if has("vat", "tax", "price", "prices", "cost", "how much", "fee"):
         return f"{CATEGORIES} {MEMBERSHIP.split('. ')[-1]} Tell me an event and I'll quote exact prices."
-    if has("pay", "payment", "mada", "apple pay", "stc", "card"):
-        return PAYMENT
     if has("refund", "cancel", "exchange", "return"):
         return "This demo doesn't process refunds yet — a refund/cancellation flow is planned. You can cancel an unconfirmed hold anytime in chat."
-    if has("arabic", "english", "language", "عربي"):
+    if has("english", "language"):
         return LANGUAGES
     if has("match", "matches", "football", "concert", "theatre", "comedy", "festival", "this week", "weekend", "what's on", "whats on", "events"):
         return "Here's what's coming up:\n" + _catalog_brief(db) + "\nWant me to book any of these?"

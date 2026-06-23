@@ -181,9 +181,9 @@ def main() -> None:
 
         if ss.confirmed:
             st.success(
-                "Confirmed. In the full flow this is where the agent creates a "
-                "Moyasar payment session (F003) and, after the webhook, emails your "
-                "signed PDF/QR ticket. The HITL gate above is the non-negotiable "
+                "Confirmed. In the full flow this is where the agent completes the "
+                "virtual checkout (sandbox — no real charge) and emails your signed "
+                "PDF/QR ticket. The HITL gate above is the non-negotiable "
                 "Constitution Principle I."
             )
 

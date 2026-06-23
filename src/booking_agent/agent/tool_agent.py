@@ -8,27 +8,29 @@ feed the result back, and repeat until the model answers or a step cap trips
 kept OUT of the model's reach and handled deterministically only after an
 explicit user "confirm" at the gate (Constitution I).
 
-Off by default (`BOOKING_AGENT_MODE=fsm`); the deterministic `policy.respond`
-remains the MVP (Constitution VIII). `complete` is injectable so the whole loop
-is unit-tested offline with a scripted fake model.
+An alternative to the default `multi_agent` orchestrator (set
+`BOOKING_AGENT_MODE=tool_agent`): a single agent with the full tool set instead of
+role-based specialists. `complete` is injectable so the whole loop is unit-tested
+offline with a scripted fake model.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
 from booking_agent.agent import guardrails, observability
 from booking_agent.agent import state as S
 from booking_agent.agent.extract import heuristic_extract
-from booking_agent.agent.llm import NANOGPT_BASE_URL, llm_available
-from booking_agent.agent.sentiment import classify_sentiment
+from booking_agent.agent.llm import llm_available, openai_base_url
 from booking_agent.agent.memory import MEMORY
+from booking_agent.agent.payloads import booking_summary_line
+from booking_agent.agent.responses import infer_response_type
+from booking_agent.agent.sentiment import classify_sentiment
 from booking_agent.agent.state import ConversationState
 from booking_agent.agent.tool_specs import TOOL_SCHEMAS, dispatch
-from booking_agent.agent.responses import infer_response_type
 from booking_agent.config import settings
 from booking_agent.db.enums import MemberTier
 from booking_agent.tools.booking import create_booking_from_hold
@@ -43,11 +45,13 @@ Complete = Callable[[list[dict], list[dict]], dict]
 MAX_STEPS = 6  # loop-prevention cap on tool round-trips per user turn
 
 SYSTEM = (
-    "You are Booking Agent, a warm, witty event-ticketing concierge for Saudi Arabia "
-    "(Arabic/English). Chat naturally like a helpful friend: greet back, make a little "
+    "You are Booking Agent, a warm, witty event-ticketing concierge for Saudi Arabia. "
+    "Chat naturally like a helpful friend: greet back, make a little "
     "small talk, answer questions, and give honest recommendations (best-value seats, "
     "what's fun this weekend). PERSONALISE using the booking-state note provided — use "
-    "the user's name and membership tier when they're known. "
+    "the user's name and membership tier when they're known. Never build a name from "
+    "an email address (e.g. don't greet 'nawaf@gmail.com' as 'nawaf gmail'); use the "
+    "provided name or no name at all. "
     "Use the tools to actually get things done — find the event, look up membership by "
     "email, quote a category + quantity, hold seats — and ask for any missing detail "
     "instead of guessing. When they want to browse but haven't said what they like, ask "
@@ -96,9 +100,12 @@ def _state_summary(state: ConversationState) -> str:
 def _confirmation_payload(db: Session, state: ConversationState) -> dict:
     ev = get_event_details(db, state.event_id)
     quote = compute_quote(db, state.event_id, state.category, state.quantity, _tier(state))
+    summary = booking_summary_line(
+        ev.title, quote.quantity, quote.category.value, state.seat_ids, sar_str(quote.total, quote.currency)
+    )
     return _payload(
         state,
-        "Please review and confirm before payment:",
+        f"{summary}\nReview and confirm before payment:",
         quote={"category": quote.category.value, "quantity": quote.quantity,
                "lines": quote.summary_lines(), "total_sar": sar_str(quote.total, quote.currency)},
         hold={"seat_ids": state.seat_ids, "expires_at": state.hold_expires, "ttl_minutes": 10},
@@ -132,8 +139,12 @@ def respond_with_tools(db: Session, state: ConversationState, message: str,
             observability.log_tool(state.session_id, "create_booking", turn=state.turn,
                                    booking_id=booking.id, total_sar=sar_str(booking.total, booking.currency))
             observability.log_transition(state.session_id, S.AWAITING_CONFIRMATION, S.PAYMENT, turn=state.turn)
-            MEMORY.record(state.email, f"{get_event_details(db, state.event_id).title} — {state.quantity}× {state.category}")
-            return _payload(state, "Confirmed! ✅ Complete your payment to get your ticket.",
+            ev_title = get_event_details(db, state.event_id).title
+            MEMORY.record(state.email, f"{ev_title} — {state.quantity}× {state.category}")
+            summary = booking_summary_line(
+                ev_title, state.quantity, state.category, state.seat_ids, sar_str(booking.total, booking.currency)
+            )
+            return _payload(state, f"Confirmed! ✅ {summary}\nComplete your payment to get your ticket.",
                             payment={"booking_id": booking.id, "total_sar": sar_str(booking.total, booking.currency)})
         if intent == "cancel":
             if state.hold_token:
@@ -154,7 +165,7 @@ def respond_with_tools(db: Session, state: ConversationState, message: str,
     for _ in range(max_steps):
         try:
             resp = complete(messages, TOOL_SCHEMAS)
-        except Exception:  # noqa: BLE001 — never hang/500 on a slow or down model
+        except Exception:
             return _payload(state, "Sorry — I'm having trouble reaching my assistant brain "
                                    "right now. Tell me an event (e.g. \"Coldplay in Riyadh\") "
                                    "and I'll get you sorted.")
@@ -206,8 +217,7 @@ def default_complete(messages: list[dict], tools: list[dict]) -> dict:
     """Call the configured nano-gpt/OpenAI model with tools; normalise the reply."""
     from openai import OpenAI  # deferred
 
-    provider = settings.booking_agent_provider.lower()
-    base_url = NANOGPT_BASE_URL if provider in {"nanogpt", "nano-gpt", "nano_gpt"} else None
+    base_url = openai_base_url(settings.booking_agent_provider)
     client = OpenAI(api_key=settings.active_llm_key, base_url=base_url,
                     timeout=settings.llm_timeout_seconds)
     resp = client.chat.completions.create(

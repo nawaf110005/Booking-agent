@@ -36,6 +36,8 @@ const API = {
   events:   "/v1/events",
   chat:     "/v1/chat",
   pay:      (bookingId) => `/v1/pay/${bookingId}`,
+  seats:    (eventId, category) => `/v1/events/${eventId}/seats?category=${encodeURIComponent(category)}`,
+  venue:    (eventId) => `/v1/events/${eventId}/venue`,
 };
 
 /**
@@ -166,6 +168,16 @@ function scrollToBottom() {
   list.scrollTop = list.scrollHeight;
 }
 
+/** Freeze every seat picker currently in the chat (used + superseded maps), so the
+ *  user can't keep selecting on an old one. The newest map stays interactive. */
+function disableSeatPickers() {
+  document.querySelectorAll(".seatmap").forEach((sm) => {
+    if (sm.classList.contains("seatmap--done")) return;
+    sm.classList.add("seatmap--done");
+    sm.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  });
+}
+
 /**
  * Remove any existing typing indicator and return its container ref.
  * Creates a fresh one.
@@ -248,7 +260,13 @@ function appendAgentBubble(replyText, payload = null) {
   }
 
   list.appendChild(wrap);
-  scrollToBottom();
+  // A seat map is tall — scroll its top (stage + sections) into view rather than
+  // jumping to the bottom, so the user sees the whole venue.
+  if (payload && payload.seatmap_url) {
+    wrap.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else {
+    scrollToBottom();
+  }
   return wrap;
 }
 
@@ -256,6 +274,172 @@ function appendAgentBubble(replyText, payload = null) {
    PAYLOAD RENDERER
    Handles all structured data from AgentReply.
 ───────────────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────────────────
+   VENUE SEAT MAP
+   Shows the whole venue: a stage, then every section laid out by
+   distance from it (VIP front → Standing back). The chosen section
+   expands into a clickable seat grid; the others are compact bands
+   you tap to switch. Confirm sends the seat IDs (same as typing).
+───────────────────────────────────────────────────────────── */
+function buildSeatMap(reply) {
+  const wrap = document.createElement("div");
+  wrap.className = "seatmap";
+
+  const idMatch = /\/events\/(\d+)\//.exec(reply.seatmap_url || "");
+  const eventId = idMatch ? Number(idMatch[1]) : null;
+  const qs = new URLSearchParams((reply.seatmap_url || "").split("?")[1] || "");
+  const category = (reply.quote && reply.quote.category) || qs.get("category") || "";
+  const quantity = (reply.quote && reply.quote.quantity) || 1;
+
+  const stage = document.createElement("div");
+  stage.className = "seatmap__stage";
+  stage.textContent = "STAGE";
+
+  const head = document.createElement("div");
+  head.className = "seatmap__head";
+  head.textContent = `Pick ${quantity} ${category} seat${quantity > 1 ? "s" : ""} — tap a section to change`;
+
+  const venue = document.createElement("div");
+  venue.className = "venue";
+  venue.textContent = "Loading venue…";
+
+  const legend = document.createElement("div");
+  legend.className = "seatmap__legend";
+  [["avail", "available"], ["sel", "selected"], ["held", "held"], ["sold", "sold"]].forEach(([k, label]) => {
+    const item = document.createElement("span");
+    const dot = document.createElement("i");
+    dot.className = `seat-dot seat-dot--${k}`;
+    item.appendChild(dot);
+    item.appendChild(document.createTextNode(label));
+    legend.appendChild(item);
+  });
+
+  const footer = document.createElement("div");
+  footer.className = "seatmap__footer";
+  const counter = document.createElement("span");
+  counter.className = "seatmap__counter";
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "seatmap__confirm";
+  confirmBtn.type = "button";
+  footer.appendChild(counter);
+  footer.appendChild(confirmBtn);
+
+  const hint = document.createElement("div");
+  hint.className = "seatmap__hint";
+  hint.textContent = 'Tip: you can also type seat IDs (e.g. "G3, G4") and send.';
+
+  wrap.append(stage, head, venue, legend, footer, hint);
+
+  const selected = [];  // seat ids, in click order
+
+  function syncFooter() {
+    counter.textContent = `${selected.length} of ${quantity} selected`;
+    const ready = selected.length === quantity;
+    confirmBtn.disabled = !ready;
+    confirmBtn.textContent = ready ? `Hold ${selected.join(", ")} →` : `Select ${quantity - selected.length} more`;
+  }
+  syncFooter();
+  confirmBtn.addEventListener("click", () => {
+    if (selected.length !== quantity) return;
+    confirmBtn.disabled = true;
+    handleUserMessage(selected.join(", "));
+  });
+
+  if (eventId == null || !category) {
+    venue.textContent = "Seat map unavailable — type seat IDs to continue.";
+    return wrap;
+  }
+
+  // Build the label row for a section band (name · availability · price).
+  function sectionLabel(sec, active) {
+    const lab = document.createElement("div");
+    lab.className = "venue-section__label";
+    const name = document.createElement("span");
+    name.className = "venue-section__name";
+    name.textContent = sec.category.toUpperCase();
+    const meta = document.createElement("span");
+    meta.className = "venue-section__meta";
+    const sold = sec.available === 0;
+    meta.textContent = sold
+      ? "sold out"
+      : `${sec.available} seats · from ${sec.price_from_sar}` + (active ? " · you're here" : " · tap to choose");
+    lab.append(name, meta);
+    return lab;
+  }
+
+  // Render the clickable seat grid for the active section.
+  function renderSeats(grid, data) {
+    grid.textContent = "";
+    (data.rows || []).forEach((r) => {
+      const rowEl = document.createElement("div");
+      rowEl.className = "seat-row";
+      const rowLabel = document.createElement("span");
+      rowLabel.className = "seat-row__label";
+      rowLabel.textContent = r.row;
+      rowEl.appendChild(rowLabel);
+      r.seats.forEach((s) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `seat seat--${s.status}`;
+        btn.textContent = s.number;
+        btn.title = `${s.id} · ${s.status}`;
+        btn.setAttribute("aria-label", `Seat ${s.id}, ${s.status}`);
+        btn.dataset.seat = s.id;
+        if (s.status !== "available") {
+          btn.disabled = true;
+        } else {
+          btn.addEventListener("click", () => {
+            const at = selected.indexOf(s.id);
+            if (at >= 0) {
+              selected.splice(at, 1);
+              btn.classList.remove("seat--selected");
+            } else {
+              if (selected.length >= quantity) {
+                const drop = selected.shift();
+                const prev = grid.querySelector(`[data-seat="${drop}"]`);
+                if (prev) prev.classList.remove("seat--selected");
+              }
+              selected.push(s.id);
+              btn.classList.add("seat--selected");
+            }
+            syncFooter();
+          });
+        }
+        rowEl.appendChild(btn);
+      });
+      grid.appendChild(rowEl);
+    });
+  }
+
+  // Fetch the whole venue + the active section's seats together.
+  Promise.all([apiFetch(API.venue(eventId)), apiFetch(API.seats(eventId, category))])
+    .then(([venueData, seatData]) => {
+      venue.textContent = "";
+      (venueData.sections || []).forEach((sec) => {
+        const isActive = sec.category === category;
+        const band = document.createElement(isActive ? "div" : "button");
+        band.className = `venue-section venue-section--${sec.category}` + (isActive ? " venue-section--active" : "");
+        band.appendChild(sectionLabel(sec, isActive));
+        if (isActive) {
+          const grid = document.createElement("div");
+          grid.className = "seatmap__grid";
+          renderSeats(grid, seatData);
+          band.appendChild(grid);
+        } else {
+          band.type = "button";
+          band.disabled = sec.available === 0;
+          band.addEventListener("click", () => handleUserMessage(sec.category));
+        }
+        venue.appendChild(band);
+      });
+    })
+    .catch((err) => {
+      venue.textContent = `Couldn't load the venue (${err.message}). Type seat IDs to continue.`;
+    });
+
+  return wrap;
+}
 
 /**
  * Given an AgentReply object, return a DOM fragment with all rich elements,
@@ -413,28 +597,10 @@ function renderPayload(reply) {
     frag.appendChild(card);
   }
 
-  /* ── seatmap_url ──────────────────────────────────────── */
+  /* ── seatmap_url → interactive, clickable seat map ────── */
   if (reply.seatmap_url) {
     hasContent = true;
-    const wrap = document.createElement("div");
-    wrap.className = "seatmap-wrap";
-
-    const img = document.createElement("img");
-    img.src = reply.seatmap_url;
-    img.alt = "Seat map — green=available, amber=held, grey=sold";
-
-    const caption = document.createElement("div");
-    caption.className = "seatmap-caption";
-    caption.textContent = "green = available · amber = held · grey = sold";
-
-    const hint = document.createElement("div");
-    hint.style.cssText = "font-size:.75rem;color:var(--text-muted);margin-top:.3rem;text-align:center;";
-    hint.textContent = 'Type seat IDs (e.g. "G3, G4") then send to hold them';
-
-    wrap.appendChild(img);
-    wrap.appendChild(caption);
-    wrap.appendChild(hint);
-    frag.appendChild(wrap);
+    frag.appendChild(buildSeatMap(reply));
   }
 
   /* ── hold ─────────────────────────────────────────────── */
@@ -717,6 +883,11 @@ function renderSuggestions(suggestions) {
 async function handleUserMessage(message, silent = false) {
   if (STATE.sending) return;
   if (!message.trim()) return;
+
+  // The user has acted, so freeze every seat picker already in the chat — only the
+  // newest map (rendered with the next reply) stays interactive. Prevents picking
+  // seats on a stale/used map.
+  disableSeatPickers();
 
   // Clear suggestions while agent is responding
   renderSuggestions([]);

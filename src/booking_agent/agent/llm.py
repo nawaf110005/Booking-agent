@@ -10,17 +10,47 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from booking_agent.agent.schemas import BookingParams
 from booking_agent.config import settings
 
+# Transient server-side hiccups worth one quick retry (overloaded / rate-limited).
+# Timeouts are deliberately NOT retried — they already burned the latency budget.
+_RETRY_ATTEMPTS = 2
+_RETRY_BACKOFF_S = 0.8
+
+
+def _is_transient(exc: Exception) -> bool:
+    code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    if code in (429, 500, 502, 503, 529):
+        return True
+    s = str(exc).lower()
+    return any(
+        t in s
+        for t in ("overloaded", "unavailable", "high demand", "rate limit",
+                  "please try again", "503", "429", "temporarily")
+    )
+
 NANOGPT_BASE_URL = "https://nano-gpt.com/api/v1"
+# Gemini exposes an OpenAI-compatible API, so we reuse the OpenAI SDK + this base URL.
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 LAST_ERROR: str | None = None
 
+
+def openai_base_url(provider: str) -> str | None:
+    """Base URL for OpenAI-compatible providers (None = real OpenAI)."""
+    p = provider.lower()
+    if p in {"nanogpt", "nano-gpt", "nano_gpt"}:
+        return NANOGPT_BASE_URL
+    if p in {"google", "gemini"}:
+        return GEMINI_BASE_URL
+    return None
+
 _SYSTEM = (
     "You extract booking slots from the user's latest message in an event-ticket "
-    "booking chat for Saudi Arabia (users may mix Arabic and English). "
+    "booking chat for Saudi Arabia. "
     "Return ONLY a compact JSON object with these keys:\n"
     '  intent: one of "book","select_event","email","category","quantity",'
     '"seats","confirm","cancel","browse","ask","greet", or null\n'
@@ -54,8 +84,27 @@ def _parse_json(text: str) -> dict | None:
 def chat_complete(system: str, user: str, max_tokens: int = 600) -> str:
     """One chat turn against the configured provider. Raises on failure.
 
-    Covers Anthropic directly and OpenAI / Nano-GPT via the OpenAI SDK.
+    Retries a couple of times on transient server errors (503 overloaded / 429
+    rate-limited) with a short backoff, so a momentary spike doesn't drop the
+    turn to the rule-based fallback. Non-transient errors raise immediately.
     """
+
+    last: Exception | None = None
+    for attempt in range(_RETRY_ATTEMPTS + 1):
+        try:
+            return _chat_complete_once(system, user, max_tokens)
+        except Exception as exc:  # broad by design: classify, then retry or re-raise
+            last = exc
+            if attempt < _RETRY_ATTEMPTS and _is_transient(exc):
+                time.sleep(_RETRY_BACKOFF_S * (attempt + 1))
+                continue
+            raise
+    assert last is not None  # unreachable; loop always returns or raises
+    raise last
+
+
+def _chat_complete_once(system: str, user: str, max_tokens: int = 600) -> str:
+    """A single provider call (Anthropic directly; OpenAI / Nano-GPT / Gemini via the OpenAI SDK)."""
 
     provider = settings.booking_agent_provider.lower()
     if provider == "anthropic":
@@ -73,7 +122,7 @@ def chat_complete(system: str, user: str, max_tokens: int = 600) -> str:
 
     from openai import OpenAI  # deferred
 
-    base_url = NANOGPT_BASE_URL if provider in {"nanogpt", "nano-gpt", "nano_gpt"} else None
+    base_url = openai_base_url(provider)
     client = OpenAI(api_key=settings.active_llm_key, base_url=base_url,
                     timeout=settings.llm_timeout_seconds)
     resp = client.chat.completions.create(
@@ -116,3 +165,26 @@ def llm_extract(message: str) -> BookingParams | None:
     except Exception as exc:
         LAST_ERROR = f"schema coercion failed: {exc}"
         return None
+
+
+_GENRE_SYSTEM = (
+    "You map an event, artist, band, team, or performer to ONE category for a Saudi "
+    "live-events catalog. Categories: concert, sports, comedy, conference, theatre. "
+    "Reply with ONLY the single best-fitting category word (lowercase). If it fits none "
+    "or you don't recognise it, reply exactly 'none'."
+)
+_GENRES = {"concert", "sports", "comedy", "conference", "theatre"}
+
+
+def infer_genre(query: str) -> str | None:
+    """Classify an unknown event/artist into a catalog genre via the LLM, so we can
+    offer similar events (e.g. 'Justin Bieber' -> 'concert'). Returns None offline,
+    on failure, or when the model can't place it — callers then fall back to rules."""
+    if not query or not llm_available():
+        return None
+    try:
+        raw = chat_complete(_GENRE_SYSTEM, query, max_tokens=8)
+    except Exception:
+        return None
+    word = re.sub(r"[^a-z]", "", raw.lower())
+    return word if word in _GENRES else None

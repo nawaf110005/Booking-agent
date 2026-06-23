@@ -6,6 +6,7 @@ export interface EventOut {
   venue: string;
   city: string;
   starts_at: string;
+  when?: string;
   image_url?: string | null;
   detail_url?: string | null;
   status: string;
@@ -38,6 +39,39 @@ export interface Hold {
   seat_ids: string[];
   expires_at: string;
   ttl_minutes: number;
+}
+
+export type SeatStatus = "available" | "held" | "sold";
+
+export interface SeatCell {
+  id: string;
+  number: number;
+  status: SeatStatus;
+}
+
+export interface SeatRow {
+  row: string;
+  seats: SeatCell[];
+}
+
+export interface SeatMapData {
+  event_id: number;
+  category: string;
+  rows: SeatRow[];
+  counts: Record<string, number>;
+}
+
+export interface VenueSection {
+  category: string;
+  tier_rank: number;
+  available: number;
+  total: number;
+  price_from_sar: string;
+}
+
+export interface VenueLayout {
+  event_id: number;
+  sections: VenueSection[];
 }
 
 export interface Confirmation {

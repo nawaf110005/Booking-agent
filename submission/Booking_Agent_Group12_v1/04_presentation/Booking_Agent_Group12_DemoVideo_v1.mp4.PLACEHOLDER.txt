@@ -1,0 +1,8 @@
+PLACEHOLDER — the demo video is not yet recorded.
+
+Replace this file with the actual recording named exactly:
+
+    Booking_Agent_Group12_DemoVideo_v1.mp4
+
+Follow Booking_Agent_Group12_DemoVideo_v1_RECORDING_SCRIPT.md in this folder for
+the exact steps and narration. Once the .mp4 is in place, delete this placeholder.

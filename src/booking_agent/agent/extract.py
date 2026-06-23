@@ -6,6 +6,7 @@ key. The LLM extractor in `llm.py` overlays richer NLU when a key is set.
 
 from __future__ import annotations
 
+import difflib
 import re
 
 from booking_agent.agent.schemas import BookingParams
@@ -21,10 +22,8 @@ ALL_DIGITS_RE = re.compile(r"^\s*\d+\s*$")
 
 CITY_MAP = {
     "riyadh": "Riyadh",
-    "الرياض": "Riyadh",
     "jeddah": "Jeddah",
     "jedda": "Jeddah",
-    "جدة": "Jeddah",
 }
 
 # Map user words to a catalog search query that the events tool will match.
@@ -55,9 +54,17 @@ BROWSE_PHRASES = (
 )
 CONFIRM_WORDS = (
     "confirm", "yes", "yeah", "yep", "sure", "ok", "okay", "proceed",
-    "pay", "go ahead", "do it", "نعم", "اكد", "أكد",
+    "pay", "go ahead", "do it",
 )
-CANCEL_WORDS = ("cancel", "no", "nope", "never mind", "stop", "لا", "الغاء", "إلغاء")
+CANCEL_WORDS = ("cancel", "no", "nope", "never mind", "stop")
+
+# Strong FAQ keywords (pricing / policy / meta) that should stay "ask" even when a
+# discovery word is present — e.g. "is there a discount this weekend?" is a question,
+# whereas "what's on this weekend" is browse.
+STRONG_ASK_KEYWORDS = (
+    "discount", "refund", "vat", "tax", "cost", "how much", "price", "policy",
+    "parking", "payment", "mada", "apple pay", "stc",
+)
 
 # Platform questions (FAQ / meta / pricing / policy) -> route to the answerer.
 ASK_KEYWORDS = (
@@ -83,6 +90,35 @@ NUMBER_WORDS = {
 
 def _has_word(text: str, word: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text) is not None
+
+
+# Build the fuzzy-match target index once: keyword token (>=4 chars) -> canonical query.
+_FUZZY_TARGETS = {
+    part: query
+    for kw, query in EVENT_KEYWORDS.items()
+    for part in kw.split()
+    if len(part) >= 4
+}
+
+
+def _fuzzy_event_query(low: str) -> str | None:
+    """Resolve typo'd / oddly-spaced event names to a catalog query.
+
+    Handles spacing ("cold play" -> coldplay) and letter typos/transpositions
+    ("coldpaly", "derbi") so a slightly-wrong question still finds the event.
+    """
+    # 1) Space-insensitive substring for longer names ("cold play" -> "coldplay").
+    low_ns = low.replace(" ", "")
+    for kw, query in EVENT_KEYWORDS.items():
+        kw_ns = kw.replace(" ", "")
+        if len(kw_ns) >= 6 and kw_ns in low_ns:
+            return query
+    # 2) Fuzzy per-word for misspellings.
+    for w in re.findall(r"[a-z]{4,}", low):
+        m = difflib.get_close_matches(w, _FUZZY_TARGETS.keys(), n=1, cutoff=0.8)
+        if m:
+            return _FUZZY_TARGETS[m[0]]
+    return None
 
 
 def heuristic_extract(message: str, step: str = "") -> BookingParams:
@@ -113,11 +149,13 @@ def heuristic_extract(message: str, step: str = "") -> BookingParams:
             params.category = cat
             break
 
-    # Event query keyword.
+    # Event query keyword (exact substring, then fuzzy for typos/spacing).
     for kw, query in EVENT_KEYWORDS.items():
         if kw in low:
             params.event_query = query
             break
+    if not params.event_query:
+        params.event_query = _fuzzy_event_query(low)
 
     # Unknown event name: if no known event matched, capture what the user is after —
     # "ticket(s)/seats for|to X" or "see/watch X" — so the agent can say "I couldn't
@@ -143,16 +181,16 @@ def heuristic_extract(message: str, step: str = "") -> BookingParams:
     elif low in NUMBER_WORDS:
         params.quantity = NUMBER_WORDS[low]
     elif ALL_DIGITS_RE.match(low):
-        params.quantity = int(low)
+        params.quantity = int(low.strip())
 
     # Temporal window for discovery ("this weekend", "today", …).
     if "weekend" in low:
         params.when = "weekend"
-    elif "tomorrow" in low or "بكرة" in low or "غدا" in low:
+    elif "tomorrow" in low:
         params.when = "tomorrow"
-    elif "this week" in low or "هذا الأسبوع" in low:
+    elif "this week" in low:
         params.when = "week"
-    elif _has_word(low, "today") or "اليوم" in low:
+    elif _has_word(low, "today"):
         params.when = "today"
 
     # Intent verbs. Questions never count as cancel/confirm (so "how do I pay?"
@@ -160,7 +198,9 @@ def heuristic_extract(message: str, step: str = "") -> BookingParams:
     is_question = text.strip().endswith("?")
     has_slot = bool(params.category or params.seat_ids or params.quantity or params.event_id)
     browse_phrase = any(p in low for p in BROWSE_PHRASES)
+    browse_signal = browse_phrase or bool(params.when)
     faq = any(k in low for k in ASK_KEYWORDS)
+    strong_faq = any(k in low for k in STRONG_ASK_KEYWORDS)
     type_q = is_question and any(w in low for w in TYPE_WORDS)
     # A bare question that isn't an explicit catalog browse → answer it.
     generic_q = is_question and not browse_phrase and not params.event_query
@@ -169,9 +209,14 @@ def heuristic_extract(message: str, step: str = "") -> BookingParams:
         params.intent = "cancel"
     elif not is_question and any(_has_word(low, w) for w in CONFIRM_WORDS):
         params.intent = "confirm"
+    elif browse_signal and not strong_faq and not has_slot and not type_q:
+        # Discovery ("what's on this weekend") beats a generic question word, so it
+        # shows events instead of a canned FAQ reply. An explicit type-question
+        # ("what football matches this week?") still routes to the answerer.
+        params.intent = "browse"
     elif not has_slot and (faq or type_q or generic_q):
         params.intent = "ask"
-    elif browse_phrase or params.when:
+    elif browse_signal:
         params.intent = "browse"
 
     return params

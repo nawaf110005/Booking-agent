@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from booking_agent.config import settings
 from booking_agent.db import engine
@@ -71,10 +69,12 @@ def create_app() -> FastAPI:
     app.include_router(holds.router, prefix="/v1", tags=["holds"])
     app.include_router(pay.router, prefix="/v1", tags=["pay"])
 
-    # Serve the WeBook-style website at / (mounted last so /v1 routes win).
-    web_dir = Path(__file__).resolve().parents[1] / "web" / "static"
-    if web_dir.is_dir():
-        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
+    # API-only: the frontend is the Next.js app on :3000. Root just points there.
+    @app.get("/", include_in_schema=False)
+    def _root() -> dict:
+        return {"service": "booking-agent", "api": "/v1", "docs": "/docs",
+                "ui": "http://localhost:3000"}
+
     return app
 
 

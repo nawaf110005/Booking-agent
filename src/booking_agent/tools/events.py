@@ -7,6 +7,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from booking_agent.db.base import utcnow
 from booking_agent.db.models import Event, Venue
 from booking_agent.tools.errors import NotFoundError
 from booking_agent.tools.schemas import EventOut
@@ -33,14 +34,21 @@ def search_events(
     on_date: date | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    include_past: bool = False,
 ) -> list[EventOut]:
     """Find events matching a free-text query, optionally filtered by city and
     by an exact date or an inclusive [date_from, date_to] window.
+
+    Expired events (whose date is before today) are excluded by default — we don't
+    surface or sell tickets to shows that have already happened. Pass
+    ``include_past=True`` for an admin/history view.
 
     Returns an empty list (never raises) when nothing matches.
     """
 
     stmt = select(Event).join(Venue).order_by(Event.starts_at)
+    if not include_past:
+        stmt = stmt.where(func.date(Event.starts_at) >= utcnow().date().isoformat())
     if query:
         stmt = stmt.where(Event.title.ilike(f"%{query.strip()}%"))
     if city:

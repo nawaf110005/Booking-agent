@@ -1,4 +1,4 @@
-import type { AgentReply, EventOut, Health, Ticket } from "./types";
+import type { AgentReply, EventOut, Health, SeatMapData, Ticket, VenueLayout } from "./types";
 
 const BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
@@ -50,3 +50,12 @@ export const chat = (sessionId: string, message: string) =>
 
 export const pay = (bookingId: number) =>
   req<{ ticket: Ticket }>("POST", `/v1/pay/${bookingId}`, {});
+
+export const seats = (eventId: number, category: string) =>
+  req<SeatMapData>(
+    "GET",
+    `/v1/events/${eventId}/seats?category=${encodeURIComponent(category)}`,
+  );
+
+export const venue = (eventId: number) =>
+  req<VenueLayout>("GET", `/v1/events/${eventId}/venue`);

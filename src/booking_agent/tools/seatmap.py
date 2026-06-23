@@ -19,6 +19,10 @@ from booking_agent.db.enums import Category, SeatStatus
 from booking_agent.db.models import Seat
 from booking_agent.tools.errors import NotFoundError
 from booking_agent.tools.holds import _expire_event_holds
+from booking_agent.tools.money import sar_str
+
+# Seating tiers ordered by distance from the stage (front → back).
+_TIER_ORDER = (Category.VIP, Category.GOLD, Category.SILVER, Category.STANDING)
 
 _COLORS = {
     SeatStatus.AVAILABLE: (46, 160, 67),    # green
@@ -39,6 +43,76 @@ def _coerce_category(category: Category | str) -> Category:
         return Category(str(category).strip().lower())
     except ValueError as exc:
         raise NotFoundError(f"unknown category: {category!r}") from exc
+
+
+def seat_map_data(session: Session, event_id: int, category: Category | str) -> dict:
+    """Structured, live seat layout for one category — for interactive (clickable)
+    seat maps in the frontends. Mirrors `render_seat_map`'s grouping but as JSON.
+
+    Shape: ``{event_id, category, rows: [{row, seats: [{id, number, status}]}],
+    counts: {available, held, sold}}``. Raises NotFoundError if there are no seats.
+    """
+
+    cat = _coerce_category(category)
+    _expire_event_holds(session, event_id, utcnow())
+
+    seats = session.execute(
+        select(Seat)
+        .where(Seat.event_id == event_id, Seat.category == cat)
+        .order_by(Seat.row, Seat.number)
+    ).scalars().all()
+    if not seats:
+        raise NotFoundError(f"event {event_id} has no '{cat.value}' seats")
+
+    rows: dict[str, list[Seat]] = {}
+    counts = {"available": 0, "held": 0, "sold": 0}
+    for s in seats:
+        rows.setdefault(s.row, []).append(s)
+
+    out_rows = []
+    for row in sorted(rows):
+        row_seats = []
+        for seat in sorted(rows[row], key=lambda s: s.number):
+            status = seat.status.value
+            counts[status] = counts.get(status, 0) + 1
+            row_seats.append({"id": seat.seat_id, "number": seat.number, "status": status})
+        out_rows.append({"row": row, "seats": row_seats})
+
+    return {"event_id": event_id, "category": cat.value, "rows": out_rows, "counts": counts}
+
+
+def venue_layout(session: Session, event_id: int) -> dict:
+    """All seating sections for an event, ordered by distance from the stage
+    (VIP front → Standing back), each with availability + from-price. Powers the
+    venue-overview seat map so the user sees every section and where they'd sit.
+
+    Shape: ``{event_id, sections: [{category, tier_rank, available, total,
+    price_from_sar}]}``. Raises NotFoundError if the event has no seats.
+    """
+    _expire_event_holds(session, event_id, utcnow())
+    seats = session.execute(
+        select(Seat).where(Seat.event_id == event_id)
+    ).scalars().all()
+    if not seats:
+        raise NotFoundError(f"event {event_id} has no seats")
+
+    by_cat: dict[Category, list[Seat]] = {}
+    for s in seats:
+        by_cat.setdefault(s.category, []).append(s)
+
+    sections = []
+    ordered = [c for c in _TIER_ORDER if c in by_cat]
+    ordered += [c for c in by_cat if c not in _TIER_ORDER]  # any extras, last
+    for rank, cat in enumerate(ordered):
+        cseats = by_cat[cat]
+        sections.append({
+            "category": cat.value,
+            "tier_rank": rank,
+            "available": sum(1 for s in cseats if s.status == SeatStatus.AVAILABLE),
+            "total": len(cseats),
+            "price_from_sar": sar_str(min(s.base_price for s in cseats)),
+        })
+    return {"event_id": event_id, "sections": sections}
 
 
 def render_seat_map(session: Session, event_id: int, category: Category | str) -> bytes:

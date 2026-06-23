@@ -17,10 +17,13 @@ from booking_agent.db.seed import seed_demo
 def _force_heuristic(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep tests offline & deterministic: the agent uses the rule-based
     extractor even when a real LLM key is configured in .env."""
+    from booking_agent.config import settings
 
-    monkeypatch.setattr("booking_agent.agent.policy.llm_available", lambda: False, raising=False)
+    monkeypatch.setattr("booking_agent.agent.orchestrator.llm_available", lambda: False, raising=False)
     monkeypatch.setattr("booking_agent.agent.answer.llm_available", lambda: False, raising=False)
     monkeypatch.setattr("booking_agent.agent.compose.llm_available", lambda: False, raising=False)
+    monkeypatch.setattr(settings, "booking_agent_mode", "multi_agent", raising=False)
+    monkeypatch.setattr(settings, "booking_agent_persist_sessions", False, raising=False)
 
 
 @pytest.fixture

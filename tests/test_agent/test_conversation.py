@@ -7,14 +7,13 @@ any step routes to a personalised answer and does NOT get misparsed into the flo
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy.orm import Session
 
 from booking_agent.agent import answer as answer_mod
-from booking_agent.agent import policy as policy_mod
+from booking_agent.agent import orchestrator as policy_mod
 from booking_agent.agent import state as S
 from booking_agent.agent.answer import answer_question
-from booking_agent.agent.policy import respond
+from booking_agent.agent.orchestrator import respond
 from booking_agent.agent.schemas import BookingParams
 from booking_agent.agent.state import ConversationState
 

@@ -27,15 +27,18 @@ KNOWLEDGE_BASE: list[dict[str, str]] = [
     {"topic": "refund cancel exchange", "text": "This demo doesn't process refunds yet — a "
      "refund/cancellation flow is planned. You can release an unconfirmed seat hold anytime "
      "by saying 'cancel'."},
-    {"topic": "payment mada apple pay stc", "text": "Payment goes through Moyasar (Mada / "
-     "Apple Pay / STC Pay) — a sandbox here, so no real charge. You confirm the full total "
-     "before any payment link is issued."},
+    {"topic": "payment checkout virtual sandbox", "text": "Payment is a secure virtual "
+     "checkout — a sandbox here, so no real charge. You review the full total and approve "
+     "it before anything is paid, then you get your QR ticket."},
 ]
 
 _STOP = {"the", "a", "an", "is", "are", "do", "does", "i", "you", "to", "of", "on", "in",
          "at", "and", "or", "my", "me", "can", "what", "whats", "s", "it", "this", "that",
          "for", "with", "there", "any", "how", "when", "where", "your", "we", "be", "about",
          "tell", "please", "want", "would", "get", "like", "some", "will",
+         # filler/location words — must never anchor an FAQ match (the "here"→payment bug)
+         "here", "coming", "come", "available", "saudi", "arabia", "ksa", "near", "soon",
+         "now", "back", "again", "really", "just", "also", "still", "yet", "happening",
          # generic booking words — too vague to anchor an FAQ match
          "ticket", "tickets", "book", "booking", "event", "events", "show", "shows",
          "seat", "seats", "need", "buy", "see", "watch", "find", "looking", "go", "going"}
@@ -47,14 +50,20 @@ def _tokens(text: str) -> set[str]:
 
 
 def retrieve(query: str, k: int = 2, min_overlap: int = 1) -> list[str]:
-    """Top-k knowledge snippets whose tokens overlap the query (>= min_overlap)."""
+    """Top-k knowledge snippets whose tokens overlap the query (>= min_overlap).
+
+    Content-rich queries (>= 4 meaningful tokens) require at least 2 overlapping
+    tokens, so a single coincidental word can't return an unrelated FAQ entry.
+    Short questions ("parking?", "refund") still match on one token.
+    """
     q = _tokens(query)
     if not q:
         return []
+    need = max(min_overlap, 2 if len(q) >= 4 else 1)
     scored = []
     for doc in KNOWLEDGE_BASE:
         overlap = len(q & _tokens(doc["topic"] + " " + doc["text"]))
-        if overlap >= min_overlap:
+        if overlap >= need:
             scored.append((overlap, doc["text"]))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [text for _, text in scored[:k]]

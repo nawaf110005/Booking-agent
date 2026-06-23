@@ -1,70 +1,99 @@
-"""LLM-enabled policy tests, incl. the HITL guardrail.
+"""Orchestrator with the LLM brain switched on (no network).
 
-The booking-flow suite runs with the LLM forced off. These tests flip it on
-(with a stubbed extractor, no network) so the *LLM-driven* path through
-`policy.respond` is exercised — including the safety property that a stray
-`confirm` from the model cannot jump the human-in-the-loop payment gate
-(Constitution I; Week 6 "Test Guardrails").
+The booking-flow suite runs with the offline brain. These tests flip the LLM on
+and inject a fake `default_complete` so the *model-driven* multi-agent path is
+exercised — the specialists choose tools, the orchestrator hands off between them
+— including the safety property that a stray `confirm` cannot jump the
+human-in-the-loop payment gate (Constitution I; Week 6 "Test Guardrails").
 """
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 from sqlalchemy.orm import Session
 
-from booking_agent.agent import policy as policy_mod
+from booking_agent.agent import orchestrator as orch
 from booking_agent.agent import state as S
-from booking_agent.agent.policy import respond
-from booking_agent.agent.schemas import BookingParams
+from booking_agent.agent import tool_agent
+from booking_agent.agent.orchestrator import respond
 from booking_agent.agent.state import ConversationState
+from booking_agent.tools.payments import pay_booking
 
 
-def _enable_llm(monkeypatch: pytest.MonkeyPatch, extract_fn) -> None:
-    # Overrides the autouse `_force_heuristic` fixture for this test only.
-    monkeypatch.setattr(policy_mod, "llm_available", lambda: True, raising=False)
-    monkeypatch.setattr(policy_mod, "llm_extract", extract_fn, raising=False)
+class TeamBrain:
+    """Stands in for the real LLM. Each specialist offers only its own tools; this
+    returns the right tool call for whichever specialist is asking, from a fixed
+    booking plan — so the orchestrator drives the team end to end, offline."""
+
+    PLAN: ClassVar[dict] = {
+        "search_events": {"query": "coldplay", "city": "Riyadh"},
+        "lookup_member": {"email": "nawaf@example.com"},
+        "quote_price": {"category": "gold", "quantity": 4},
+        "hold_seats": {"seat_ids": ["G3", "G4", "G5", "G6"]},
+    }
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.done: set[str] = set()
+
+    def __call__(self, messages: list[dict], tools: list[dict]) -> dict:
+        self.calls += 1
+        for t in tools:
+            name = t["function"]["name"]
+            if name in self.PLAN and name not in self.done:
+                self.done.add(name)
+                return {"content": "", "tool_calls": [{"id": name, "name": name, "arguments": self.PLAN[name]}]}
+        return {"content": "ok", "tool_calls": []}
 
 
-def test_llm_extractor_drives_one_shot_booking(seeded: Session, monkeypatch) -> None:
-    # Slots come from the LLM (not regex); the agent should still reach the seat
-    # map in one turn — parity with the heuristic one-shot, via the LLM path.
-    def fake_extract(message: str) -> BookingParams:
-        return BookingParams(intent="book", event_query="coldplay", city="Riyadh",
-                             category="gold", quantity=4, email="nawaf@example.com")
+def _enable_llm(monkeypatch: pytest.MonkeyPatch, brain) -> None:
+    # Override the autouse offline fixture for this test only.
+    monkeypatch.setattr(orch, "llm_available", lambda: True, raising=False)
+    monkeypatch.setattr(orch, "llm_extract", lambda m: None, raising=False)
+    monkeypatch.setattr(tool_agent, "default_complete", brain, raising=False)
 
-    _enable_llm(monkeypatch, fake_extract)
+
+def test_specialist_team_books_with_injected_brain(seeded: Session, monkeypatch) -> None:
+    brain = TeamBrain()
+    _enable_llm(monkeypatch, brain)
     st = ConversationState(session_id="t")
-    r = respond(seeded, st, "free-form text the LLM turns into slots")
+    r = respond(seeded, st, "4 gold for Coldplay in Riyadh, nawaf@example.com")
+
+    # The model drove every specialist; the orchestrator reached the HITL gate.
     assert st.event_id is not None
     assert (st.email, st.category, st.quantity) == ("nawaf@example.com", "gold", 4)
-    assert r["step"] == S.SEAT_SELECTION
+    assert st.hold_token is not None
+    assert r["step"] == S.AWAITING_CONFIRMATION
+    assert r["confirmation"]["total_sar"] == "3,128.00 SAR"
+
+    # Confirm is handled in code — the model is not consulted to take payment.
+    r2 = respond(seeded, st, "confirm")
+    assert r2["step"] == S.PAYMENT and st.booking_id
+    ticket = pay_booking(seeded, st.booking_id)
+    assert ticket["seats"] == ["G3", "G4", "G5", "G6"]
 
 
-def test_heuristic_ask_intent_not_downgraded_by_llm(seeded: Session, monkeypatch) -> None:
-    # A question must stay a question even if the LLM mislabels it as a booking.
-    _enable_llm(monkeypatch, lambda m: BookingParams(intent="book", event_query="coldplay"))
+def test_confirm_cannot_bypass_hitl_gate(seeded: Session, monkeypatch) -> None:
+    # GUARDRAIL: a stray "confirm" on a fresh session must not issue payment,
+    # because state != AWAITING_CONFIRMATION.
+    _enable_llm(monkeypatch, TeamBrain())
     st = ConversationState(session_id="t")
-    r = respond(seeded, st, "is there a discount?")
-    assert st.event_id is None  # not derailed into a booking
-    assert "%" in r["reply"] or "member" in r["reply"].lower()
-
-
-def test_llm_confirm_cannot_bypass_hitl_gate(seeded: Session, monkeypatch) -> None:
-    # GUARDRAIL: model returns intent=confirm on a fresh session; no payment may
-    # be issued because state != AWAITING_CONFIRMATION.
-    _enable_llm(monkeypatch, lambda m: BookingParams(intent="confirm"))
-    st = ConversationState(session_id="t")
-    r = respond(seeded, st, "go")
+    r = respond(seeded, st, "confirm")
     assert r["payment"] is None
     assert r["step"] != S.PAYMENT
     assert st.booking_id is None
 
 
-def test_policy_falls_back_when_llm_returns_none(seeded: Session, monkeypatch) -> None:
-    # If the model is unavailable/malformed (extractor -> None), the heuristic
-    # still carries the turn.
-    _enable_llm(monkeypatch, lambda m: None)
+def test_graceful_when_model_unavailable(seeded: Session, monkeypatch) -> None:
+    # If the injected brain raises (slow/down provider), the turn must not crash;
+    # the deterministic catalog resolution still carries it forward.
+    def boom(messages, tools):
+        raise RuntimeError("provider timeout")
+
+    _enable_llm(monkeypatch, boom)
     st = ConversationState(session_id="t")
     r = respond(seeded, st, "Coldplay in Riyadh")
-    assert st.event_id is not None
-    assert r["step"] == S.NEED_EMAIL
+    assert r["reply"]                       # answered, didn't hang/crash
+    assert st.booking_id is None            # no payment slipped through

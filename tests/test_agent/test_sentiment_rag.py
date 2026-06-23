@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from booking_agent.agent.answer import answer_question
-from booking_agent.agent.policy import respond
+from booking_agent.agent.orchestrator import respond
 from booking_agent.agent.rag import retrieve
 from booking_agent.agent.sentiment import classify_sentiment, is_unhappy
 from booking_agent.agent.state import ConversationState
@@ -56,7 +56,7 @@ def test_extractor_captures_unknown_event_name() -> None:
 def test_unknown_event_is_acknowledged_not_ignored(seeded: Session) -> None:
     # "ticket for jb" (not in the catalog) must be acknowledged — not answered with
     # an unrelated FAQ snippet (the old bug).
-    from booking_agent.agent.policy import respond
+    from booking_agent.agent.orchestrator import respond
     from booking_agent.agent.state import ConversationState
 
     st = ConversationState(session_id="ue1")

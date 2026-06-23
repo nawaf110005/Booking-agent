@@ -37,3 +37,27 @@ def test_falls_back_to_original_on_error(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(compose_mod, "chat_complete", _boom)
     assert compose_reply("hello") == "hello"
+
+
+def test_structured_payloads_are_never_rephrased(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GUARD: a confirmation/payment/quote reply carries its facts in the structured
+    card, so its thin label text must stay EXACT — even with dynamic replies on, the
+    rephraser (which would otherwise invent seats/price/email) must not run on it."""
+    from booking_agent.agent import payloads
+    from booking_agent.agent.state import ConversationState
+
+    # Make any rephrasing loudly visible.
+    monkeypatch.setattr(payloads, "compose_reply", lambda t: "REPHRASED:" + t)
+
+    st = ConversationState(session_id="c")
+    # Confirmation/payment replies: left byte-identical.
+    conf = payloads.make_payload(st, "Please review and confirm before payment:",
+                                 confirmation={"event_title": "Coldplay", "seats": ["B4"]})
+    assert conf["reply"] == "Please review and confirm before payment:"
+    pay = payloads.make_payload(st, "Confirmed! Complete your payment.",
+                                payment={"booking_id": 1, "total_sar": "1,466.25 SAR"})
+    assert pay["reply"] == "Confirmed! Complete your payment."
+
+    # A plain conversational reply (facts already in the text) IS rephrased.
+    plain = payloads.make_payload(st, "What's your email?")
+    assert plain["reply"] == "REPHRASED:What's your email?"

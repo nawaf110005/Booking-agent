@@ -212,6 +212,48 @@ def _converse(db: Session, state: ConversationState, message: str) -> dict:
     return _reply(state, reply, suggestions=_step_suggestions(state))
 
 
+# Steps where we're waiting on one specific slot from the user (used by the anti-loop guard).
+_SLOT_STEPS = (S.NEED_EMAIL, S.CATEGORY_SELECTION, S.NEED_QUANTITY, S.SEAT_SELECTION)
+
+
+def _stall_help(db: Session, state: ConversationState) -> dict:
+    """Escalated, bilingual prompt when the user is stuck at a slot step and we
+    couldn't parse their last couple of messages — avoids repeating verbatim."""
+    if state.step == S.NEED_EMAIL:
+        return _reply(
+            state,
+            "I just need your email to check for a member discount — type it like "
+            "name@example.com.\nأرسل بريدك الإلكتروني (مثل name@example.com) لأطبّق خصم العضوية.",
+            suggestions=["nawaf@example.com", "guest@example.com"],
+        )
+    if state.step == S.CATEGORY_SELECTION:
+        tier = _tier_enum(state)
+        return _reply(
+            state,
+            "Which seat category would you like — VIP, Gold, Silver, or Standing?\n"
+            "أي فئة تفضّل: VIP أو ذهبي أو فضي أو واقف؟",
+            categories=_categories_payload(db, state.event_id, tier),
+            suggestions=[c.category.value for c in get_categories_with_pricing(db, state.event_id, tier)],
+        )
+    if state.step == S.NEED_QUANTITY:
+        return _reply(
+            state,
+            f"How many tickets? Just send a number (up to {state.ticket_cap}).\n"
+            f"كم تذكرة تريد؟ أرسل رقمًا (حتى {state.ticket_cap}).",
+            suggestions=[str(n) for n in dict.fromkeys((2, 4, state.ticket_cap)) if n <= state.ticket_cap],
+        )
+    # SEAT_SELECTION
+    seats = _available_seats(db, state.event_id, state.category, state.quantity) if state.category else []
+    example = ", ".join(seats) if seats else "G3"
+    return _reply(
+        state,
+        f"Pick {state.quantity} seat(s) by typing their IDs, e.g. {example}.\n"
+        f"اختر {state.quantity} مقعدًا بكتابة الرموز، مثل {example}.",
+        seatmap_url=_seatmap_url(state),
+        suggestions=[", ".join(seats)] if seats else [],
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Main turn handler
 # --------------------------------------------------------------------------- #
@@ -257,6 +299,20 @@ def respond(db: Session, state: ConversationState, message: str) -> dict:
     #     going. Personalised; broadened to greetings/small talk when the LLM is on. #
     if params.intent == "ask" or (llm_available() and params.intent in ("greet", "smalltalk")):
         return _converse(db, state, message)
+
+    # --- Anti-loop: if we're mid-booking at a slot step and couldn't parse anything
+    #     usable two turns running, escalate to a clearer bilingual hint instead of
+    #     repeating the identical question. ------------------------------------ #
+    nothing_parsed = params.intent is None and not any([
+        params.email, params.category, params.quantity, params.seat_ids,
+        params.event_id, params.event_query, params.when, params.city,
+    ])
+    if nothing_parsed and entry_step in _SLOT_STEPS:
+        state.stall_count += 1
+    else:
+        state.stall_count = 0
+    if state.stall_count >= 2 and entry_step in _SLOT_STEPS:
+        return _stall_help(db, state)
 
     # --- Post-completion: a finished booking can start over or just chat. -- #
     if state.step == S.CONFIRMED:

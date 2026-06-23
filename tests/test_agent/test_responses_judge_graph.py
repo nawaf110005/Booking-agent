@@ -7,10 +7,9 @@ from sqlalchemy.orm import Session
 from booking_agent.agent import state as S
 from booking_agent.agent.graph import build_graph, plan_booking
 from booking_agent.agent.judge import judge_reply
-from booking_agent.agent.policy import respond
+from booking_agent.agent.orchestrator import respond
 from booking_agent.agent.responses import AgentResponse, infer_response_type
 from booking_agent.agent.state import ConversationState
-
 
 # --- typed responses (FR-010) --------------------------------------------- #
 

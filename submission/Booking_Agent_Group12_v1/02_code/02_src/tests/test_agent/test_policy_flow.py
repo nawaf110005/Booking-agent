@@ -154,3 +154,47 @@ def test_question_and_completion_at_payment_step(seeded: Session) -> None:
     respond(seeded, st, "book the Riyadh derby")
     assert st.booking_id is None
     assert st.event_id is not None
+
+
+def test_anti_loop_stall_escalates_at_email_step(seeded: Session) -> None:
+    """Unparseable input twice at a slot step yields an escalated bilingual hint,
+    not the identical question forever."""
+    st = _state()
+    respond(seeded, st, "Coldplay in Riyadh")
+    assert st.step == S.NEED_EMAIL
+
+    # Two turns of gibberish we can't parse into any slot.
+    respond(seeded, st, "qwerty")
+    assert st.stall_count == 1
+    r = respond(seeded, st, "asdfgh")
+    assert st.stall_count == 2
+    assert st.step == S.NEED_EMAIL
+    assert "name@example.com" in r["reply"]
+    assert "بريدك" in r["reply"]  # the Arabic half of the escalated hint
+
+
+def test_stall_counter_resets_on_progress(seeded: Session) -> None:
+    st = _state()
+    respond(seeded, st, "Coldplay in Riyadh")
+    respond(seeded, st, "blah")
+    assert st.stall_count == 1
+    respond(seeded, st, "nawaf@example.com")  # real progress
+    assert st.stall_count == 0
+    assert st.step == S.CATEGORY_SELECTION
+
+
+def test_arabic_booking_flow_offline(seeded: Session) -> None:
+    """A full slot fill driven by Arabic input, with the LLM disabled (heuristic only)."""
+    st = _state()
+    r = respond(seeded, st, "ابغى تذاكر كولدبلاي في الرياض")
+    assert st.event_id is not None
+    assert r["step"] == S.NEED_EMAIL
+
+    respond(seeded, st, "nawaf@example.com")
+    r = respond(seeded, st, "ذهبي")  # gold
+    assert st.category == "gold"
+    assert r["step"] == S.NEED_QUANTITY
+
+    r = respond(seeded, st, "٤")  # 4 in Arabic-Indic digits
+    assert st.quantity == 4
+    assert r["step"] == S.SEAT_SELECTION

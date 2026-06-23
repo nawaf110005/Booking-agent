@@ -67,6 +67,12 @@ def seed_demo(session: Session) -> None:
 
     now = datetime.now(tz=UTC)
 
+    def _showtime(days: int, hour: int = 20) -> datetime:
+        """A believable, stable showtime: today + ``days`` pinned to a fixed hour —
+        not the current wall-clock minute, which produced odd times like 09:17."""
+        d = now + timedelta(days=days)
+        return datetime(d.year, d.month, d.day, hour, 0, tzinfo=UTC)
+
     # --- Venues ---
     kingdom = Venue(name="Kingdom Arena", city="Riyadh", capacity=22000)
     superdome = Venue(name="Jeddah Superdome", city="Jeddah", capacity=12000)
@@ -103,7 +109,7 @@ def seed_demo(session: Session) -> None:
             "fireworks, and hits like Yellow, Viva la Vida, and My Universe. "
             "Gates open two hours before show time."
         ),
-        starts_at=now + timedelta(days=30),
+        starts_at=_showtime(30),
         venue_id=kingdom.id,
         image_url="https://example.com/img/coldplay.jpg",
         detail_url="https://example.com/events/coldplay-riyadh",
@@ -116,7 +122,7 @@ def seed_demo(session: Session) -> None:
             "spectacular live show on the Red Sea coast, with full lights, fireworks, "
             "and the band's biggest anthems."
         ),
-        starts_at=now + timedelta(days=45),
+        starts_at=_showtime(45),
         venue_id=superdome.id,
         image_url="https://example.com/img/coldplay.jpg",
         detail_url="https://example.com/events/coldplay-jeddah",
@@ -129,7 +135,7 @@ def seed_demo(session: Session) -> None:
             "Kingdom's fiercest rivalry, packed with world-class stars and an "
             "electric crowd at Kingdom Arena."
         ),
-        starts_at=now + timedelta(days=10),
+        starts_at=_showtime(10, hour=19),
         venue_id=kingdom.id,
         image_url="https://example.com/img/derby.jpg",
         detail_url="https://example.com/events/riyadh-derby",
@@ -141,7 +147,7 @@ def seed_demo(session: Session) -> None:
             "LEAP is one of the world's largest tech events — keynotes from global "
             "leaders, startups, AI, robotics, and future-tech across multiple stages."
         ),
-        starts_at=now + timedelta(days=20),
+        starts_at=_showtime(20, hour=9),
         venue_id=bujairi.id,
         image_url="https://example.com/img/leap.jpg",
         detail_url="https://example.com/events/leap",
@@ -153,7 +159,7 @@ def seed_demo(session: Session) -> None:
             "MDLBEAST Soundstorm — the region's biggest music festival, with top "
             "global DJs and artists across multiple stages over several nights."
         ),
-        starts_at=now + timedelta(days=60),
+        starts_at=_showtime(60, hour=21),
         venue_id=kingdom.id,
         image_url="https://example.com/img/soundstorm.jpg",
         detail_url="https://example.com/events/soundstorm",

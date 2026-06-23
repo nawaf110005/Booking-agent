@@ -1,0 +1,6 @@
+tier,discount_bps,discount_pct,max_tickets_per_booking
+(non-member),0,0%,4
+bronze,500,5%,4
+silver,1000,10%,6
+gold,1200,12%,6
+platinum,1500,15%,8

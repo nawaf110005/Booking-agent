@@ -1,9 +1,9 @@
 """Payment + ticket issuance.
 
-The MVP ships a **fake** gateway that completes the booking offline (no real
-charge) so the chat demo finishes end to end. It is idempotent — paying the same
-booking twice yields exactly one paid booking and one ticket (Constitution V).
-Swapping in Moyasar (signature-verified webhook) is the F003 upgrade.
+The app ships a **virtual (fake)** gateway that completes the booking offline (no
+real charge) so the chat demo finishes end to end. It is idempotent — paying the
+same booking twice yields exactly one paid booking and one ticket (Constitution V).
+A real provider (signature-verified webhook) is a possible future swap.
 """
 
 from __future__ import annotations

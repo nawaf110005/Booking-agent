@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Booking Agent — Book live events in one chat. An AI booking concierge." />
+  <title>Booking Agent — Live Events & Tickets</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="landing.css" />
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="navbar" role="navigation" aria-label="Main navigation">
+    <div class="navbar__brand">
+      <svg class="navbar__ticket-icon" viewBox="0 0 28 28" fill="none"
+           xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="tg" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#e6007e"/>
+            <stop offset="100%" stop-color="#7b2ff7"/>
+          </linearGradient>
+        </defs>
+        <rect x="2" y="7" width="24" height="14" rx="3" fill="url(#tg)"/>
+        <circle cx="2"  cy="14" r="3" fill="#0b0b0f"/>
+        <circle cx="26" cy="14" r="3" fill="#0b0b0f"/>
+        <line x1="10" y1="7" x2="10" y2="21" stroke="#0b0b0f" stroke-width="1.5" stroke-dasharray="2 2"/>
+        <rect x="13" y="11" width="8" height="2" rx="1" fill="rgba(255,255,255,.7)"/>
+        <rect x="13" y="15" width="5" height="2" rx="1" fill="rgba(255,255,255,.45)"/>
+      </svg>
+      <div>
+        <span class="navbar__wordmark grad-text">Booking Agent</span>
+        <span class="navbar__sub">AI booking concierge</span>
+      </div>
+    </div>
+    <ul class="navbar__links" role="list">
+      <li><a href="#how" aria-label="How it works">How it works</a></li>
+      <li><a href="#why" aria-label="Why Booking Agent">Why Booking Agent</a></li>
+      <li><a href="#demo" aria-label="See it in action">See it</a></li>
+    </ul>
+    <div class="navbar__right">
+      <span class="lang-toggle" aria-label="Language toggle" role="img">EN | ع</span>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero" aria-labelledby="hero-headline">
+    <div class="hero__aurora" aria-hidden="true">
+      <span class="blob blob--1"></span>
+      <span class="blob blob--2"></span>
+      <span class="blob blob--3"></span>
+    </div>
+    <div class="hero__particles" id="particles" aria-hidden="true"></div>
+
+    <div class="hero__inner">
+      <span class="hero__eyebrow reveal">🎫 AI-Powered Ticketing · Saudi Arabia</span>
+      <h1 class="hero__headline reveal" id="hero-headline">
+        Book live events
+        <span class="grad-text grad-anim word-flip">
+          <span>in one chat.</span>
+        </span>
+      </h1>
+      <p class="hero__subline reveal">
+        From &ldquo;I want a ticket&rdquo; to a QR ticket in your inbox —
+        no forms, no five-step checkout. Just a conversation.
+      </p>
+      <div class="hero__cta-row reveal">
+        <button class="btn-primary btn-shine" id="hero-cta" aria-label="Open chat to book with AI">
+          Book with AI 🎫
+        </button>
+        <a href="#how" class="btn-ghost">See how it works ↓</a>
+      </div>
+
+      <div class="hero__trust reveal" aria-label="Trust indicators">
+        <div class="trust-item"><span class="trust-dot"></span> Seat holds in 10 min</div>
+        <div class="trust-item"><span class="trust-dot"></span> Member discounts applied</div>
+        <div class="trust-item"><span class="trust-dot"></span> QR ticket to your inbox</div>
+        <div class="trust-item"><span class="trust-dot"></span> Confirm before you pay</div>
+      </div>
+    </div>
+
+    <!-- scrolling "vibes" marquee — categories, NOT a catalog -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee__track">
+        <span>Concerts</span><span aria-hidden="true">✦</span>
+        <span>Sports</span><span aria-hidden="true">✦</span>
+        <span>Comedy</span><span aria-hidden="true">✦</span>
+        <span>Theatre</span><span aria-hidden="true">✦</span>
+        <span>Festivals</span><span aria-hidden="true">✦</span>
+        <span>Conferences</span><span aria-hidden="true">✦</span>
+        <span>Concerts</span><span aria-hidden="true">✦</span>
+        <span>Sports</span><span aria-hidden="true">✦</span>
+        <span>Comedy</span><span aria-hidden="true">✦</span>
+        <span>Theatre</span><span aria-hidden="true">✦</span>
+        <span>Festivals</span><span aria-hidden="true">✦</span>
+        <span>Conferences</span><span aria-hidden="true">✦</span>
+      </div>
+    </div>
+    <div class="scroll-cue" aria-hidden="true"><span></span></div>
+  </header>
+
+  <!-- HOW IT WORKS -->
+  <section class="showcase" id="how" aria-labelledby="how-title">
+    <div class="showcase__head reveal">
+      <span class="eyebrow">The idea</span>
+      <h2 id="how-title">One conversation. <span class="grad-text">Ticket in your inbox.</span></h2>
+      <p class="showcase__lede">
+        You chat; the agent finds the event, applies your member discount, holds your
+        seats atomically, and waits for your OK before charging anything.
+      </p>
+    </div>
+    <ol class="flow" role="list">
+      <li class="flow__step reveal" style="--d:0ms">
+        <span class="flow__num">1</span><h3>Tell me</h3>
+        <p>&ldquo;4 Gold for Coldplay in Riyadh.&rdquo; Arabic or English.</p>
+      </li>
+      <li class="flow__step reveal" style="--d:120ms">
+        <span class="flow__num">2</span><h3>I quote it</h3>
+        <p>Member discount + 15% VAT, itemised to the halala.</p>
+      </li>
+      <li class="flow__step reveal" style="--d:240ms">
+        <span class="flow__num">3</span><h3>Pick seats</h3>
+        <p>Live seat map; I hold them for 10 minutes.</p>
+      </li>
+      <li class="flow__step reveal" style="--d:360ms">
+        <span class="flow__num">4</span><h3>Confirm &amp; go</h3>
+        <p>You approve the total, pay, and get a QR ticket.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- WHY -->
+  <section class="showcase showcase--alt" id="why" aria-labelledby="why-title">
+    <div class="showcase__head reveal">
+      <span class="eyebrow">Why it's different</span>
+      <h2 id="why-title">A booking <span class="grad-text">agent</span>, not a search bar</h2>
+    </div>
+    <div class="feature-grid" role="list">
+      <article class="feature reveal" style="--d:0ms" role="listitem">
+        <div class="feature__icon">💬</div><h3>One chat, zero forms</h3>
+        <p>The whole funnel — find, price, seat, pay — collapses into a single conversation.</p>
+      </article>
+      <article class="feature reveal" style="--d:80ms" role="listitem">
+        <div class="feature__icon">🪪</div><h3>Discount, automatically</h3>
+        <p>Your tier is read from your email and applied every time — never buried five clicks deep.</p>
+      </article>
+      <article class="feature reveal" style="--d:160ms" role="listitem">
+        <div class="feature__icon">🪑</div><h3>Atomic 10-min holds</h3>
+        <p>Seats are held all-or-nothing with a visible timer. No two people hold the same seat.</p>
+      </article>
+      <article class="feature reveal" style="--d:240ms" role="listitem">
+        <div class="feature__icon">✅</div><h3>Confirm before you pay</h3>
+        <p>The agent shows the exact total and waits for your yes. It never charges on its own.</p>
+      </article>
+      <article class="feature reveal" style="--d:320ms" role="listitem">
+        <div class="feature__icon">🎫</div><h3>Signed QR ticket</h3>
+        <p>Tamper-evident, HMAC-signed, delivered straight to your inbox.</p>
+      </article>
+      <article class="feature reveal" style="--d:400ms" role="listitem">
+        <div class="feature__icon">🧠</div><h3>Learns your taste</h3>
+        <p>It asks what you like and remembers it — showing the right shows, not the whole catalog.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- DEMO / CONVERSATION -->
+  <section class="showcase" id="demo" aria-labelledby="demo-title">
+    <div class="showcase__head reveal">
+      <span class="eyebrow">See it</span>
+      <h2 id="demo-title">From &ldquo;I want a ticket&rdquo; to <span class="grad-text">done</span></h2>
+    </div>
+
+    <div class="demo-phone reveal">
+      <div class="demo-phone__notch" aria-hidden="true"></div>
+      <div class="demo-chat" id="demo-chat" role="img"
+           aria-label="Sample conversation: the user books 4 Gold Coldplay tickets and gets a QR ticket">
+        <div class="bubble bubble--user">4 Gold tickets for Coldplay in Riyadh, nawaf@example.com</div>
+        <div class="bubble bubble--agent">Nawaf, you're <strong>Platinum</strong> — 15% off. Gold ×4 = <strong>3,128.00 SAR</strong> incl. VAT. Pick 4 seats →</div>
+        <div class="bubble bubble--user">G3, G4, G5, G6</div>
+        <div class="bubble bubble--agent">Held for <strong>10:00</strong> ⏱️ Confirm to pay and I'll send your QR ticket.</div>
+        <div class="bubble bubble--user">confirm</div>
+        <div class="bubble bubble--agent">Done ✅ Your ticket is on its way to your inbox 🎫</div>
+        <div class="typing" id="demo-typing" aria-hidden="true"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+
+    <div class="demo-cta-row reveal">
+      <button class="btn-primary btn-shine" id="demo-cta" aria-label="Open chat to try it">
+        Try it now — Book with AI 🎫
+      </button>
+    </div>
+  </section>
+
+  <!-- BY THE NUMBERS -->
+  <section class="stats-section" id="numbers" aria-labelledby="numbers-title">
+    <div class="showcase__head reveal">
+      <span class="eyebrow">By the numbers</span>
+      <h2 id="numbers-title">The checkout funnel, <span class="grad-text">collapsed</span></h2>
+      <p class="showcase__lede">
+        Ticketing loses most of its sales at checkout. Booking Agent turns the entire funnel into
+        a single conversation — here's the idea in numbers.
+      </p>
+    </div>
+    <div class="stats">
+      <div class="stat reveal" style="--d:0ms">
+        <div class="stat__num"><span class="count" data-to="80">0</span>%</div>
+        <p>of ticketing carts are abandoned at checkout — the problem we remove</p>
+      </div>
+      <div class="stat stat--mid reveal" style="--d:80ms">
+        <div class="stat__num"><span class="count" data-to="1">0</span></div>
+        <p>conversation from &ldquo;I want a ticket&rdquo; to a QR ticket</p>
+      </div>
+      <div class="stat reveal" style="--d:160ms">
+        <div class="stat__num"><span class="count" data-to="0">0</span></div>
+        <p>forms to fill out — it's all chat, in Arabic or English</p>
+      </div>
+      <div class="stat reveal" style="--d:240ms">
+        <div class="stat__num"><span class="count" data-to="15">0</span>%</div>
+        <p>member discount auto-applied — read straight from your email</p>
+      </div>
+      <div class="stat stat--mid reveal" style="--d:320ms">
+        <div class="stat__num"><span class="count" data-to="10">0</span> min</div>
+        <p>atomic seat hold with a live timer — nobody double-books</p>
+      </div>
+      <div class="stat reveal" style="--d:400ms">
+        <div class="stat__num"><span class="count" data-to="100">0</span>%</div>
+        <p>confirm-before-pay — the agent never charges on its own</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <strong class="grad-text">Booking Agent</strong> &mdash; AI event-booking concierge ·
+    Booking-Agent capstone 2026
+  </footer>
+
+  <!-- CHAT LAUNCHER -->
+  <button class="chat-launcher" id="chat-launcher"
+          aria-label="Open booking assistant chat" aria-expanded="false" aria-controls="chat-panel">
+    🎫
+    <span class="chat-launcher__badge" id="chat-badge" aria-hidden="true"></span>
+  </button>
+
+  <!-- CHAT PANEL -->
+  <section class="chat-panel hidden" id="chat-panel"
+           role="dialog" aria-label="Booking Assistant chat" aria-modal="true">
+    <header class="chat-header">
+      <div class="chat-header__left">
+        <span class="chat-header__icon" aria-hidden="true">🎫</span>
+        <div class="chat-header__info">
+          <div class="chat-header__title">Booking Assistant</div>
+          <div class="chat-header__status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="agent-status">Ready</span>
+          </div>
+        </div>
+      </div>
+      <button class="chat-close" id="chat-close" aria-label="Close chat panel">&#x2715;</button>
+    </header>
+    <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
+    <div class="chat-composer">
+      <div class="chat-suggestions-bar" id="suggestions-bar" role="list" aria-label="Quick reply suggestions"></div>
+      <div class="composer-row">
+        <label for="chat-input" class="visually-hidden">Type a message</label>
+        <input type="text" class="chat-input" id="chat-input" placeholder="Type a message…"
+               autocomplete="off" aria-label="Chat message input" />
+        <button class="chat-send" id="chat-send" aria-label="Send message" disabled>
+          <svg viewBox="0 0 20 20" fill="none" width="18" height="18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 10l14-7-7 14V10H3z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <p class="composer-hint">Powered by an AI agent — add an LLM key for full natural-language chat</p>
+    </div>
+  </section>
+
+  <style>
+    .visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  </style>
+
+  <script src="app.js"></script>
+  <script src="landing.js"></script>
+</body>
+</html>

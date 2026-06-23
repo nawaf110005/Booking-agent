@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { chat, createSession, mediaUrl, pay } from "@/lib/api";
-import type { AgentReply, Ticket } from "@/lib/types";
+import { chat, createSession, mediaUrl, pay, seats, venue } from "@/lib/api";
+import type { AgentReply, SeatMapData, Ticket, VenueLayout } from "@/lib/types";
 
 type Msg = {
   id: number;
@@ -165,8 +165,15 @@ export default function Chat({
 
           {/* Messages */}
           <div ref={listRef} className="scroll-thin flex-1 space-y-3 overflow-y-auto p-3">
-            {messages.map((m) => (
-              <MessageBubble key={m.id} msg={m} now={now} onSend={send} onPay={handlePay} />
+            {messages.map((m, i) => (
+              <MessageBubble
+                key={m.id}
+                msg={m}
+                now={now}
+                onSend={send}
+                onPay={handlePay}
+                isLast={i === messages.length - 1}
+              />
             ))}
             {sending && (
               <div className="flex gap-1 px-2 text-muted">
@@ -229,11 +236,13 @@ function MessageBubble({
   now,
   onSend,
   onPay,
+  isLast,
 }: {
   msg: Msg;
   now: number;
   onSend: (m: string) => void;
   onPay: (bookingId: number) => void;
+  isLast: boolean;
 }) {
   if (msg.ticket) return <TicketCard ticket={msg.ticket} />;
 
@@ -257,7 +266,7 @@ function MessageBubble({
           {rich(msg.text)}
         </div>
       )}
-      {msg.reply && <Payload reply={msg.reply} now={now} onSend={onSend} onPay={onPay} />}
+      {msg.reply && <Payload reply={msg.reply} now={now} onSend={onSend} onPay={onPay} isLast={isLast} />}
     </div>
   );
 }
@@ -267,11 +276,13 @@ function Payload({
   now,
   onSend,
   onPay,
+  isLast,
 }: {
   reply: AgentReply;
   now: number;
   onSend: (m: string) => void;
   onPay: (bookingId: number) => void;
+  isLast: boolean;
 }) {
   return (
     <div className="mt-2 w-[90%] space-y-2">
@@ -292,6 +303,9 @@ function Payload({
                 <div className="text-xs text-muted">
                   {ev.venue} · {ev.city}
                 </div>
+                {ev.when ? (
+                  <div className="mt-0.5 text-xs text-muted">🗓 {ev.when}</div>
+                ) : null}
                 <div className="mt-2 flex items-center justify-between">
                   <span className="text-xs text-muted">
                     {ev.price_from_sar ? `From ${ev.price_from_sar}` : ""}
@@ -345,15 +359,7 @@ function Payload({
         </div>
       )}
 
-      {reply.seatmap_url && (
-        <figure className="overflow-hidden rounded-xl border border-line bg-surface2 p-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={mediaUrl(reply.seatmap_url)} alt="Seat map" className="w-full rounded-md" />
-          <figcaption className="mt-1 text-center text-[10px] text-muted">
-            green = available · amber = held · grey = sold
-          </figcaption>
-        </figure>
-      )}
+      {reply.seatmap_url && <SeatMap reply={reply} onSend={onSend} frozen={!isLast} />}
 
       {reply.hold && !reply.confirmation && (
         <div className="rounded-lg border border-line bg-surface2 px-3 py-2 text-xs">
@@ -409,6 +415,207 @@ function Payload({
         </div>
       )}
     </div>
+  );
+}
+
+const CAT_ACCENT: Record<string, string> = {
+  vip: "#ffd166",
+  gold: "#f4a62a",
+  silver: "#c9d1d9",
+  standing: "#6ee7b7",
+};
+
+/** Venue seat map: the stage, then every section by distance from it (VIP front →
+ *  Standing back). The chosen section expands into a clickable grid; the others are
+ *  tappable bands that switch section. Confirm sends the seat IDs (same as typing). */
+function SeatMap({
+  reply,
+  onSend,
+  frozen = false,
+}: {
+  reply: AgentReply;
+  onSend: (m: string) => void;
+  frozen?: boolean;
+}) {
+  const idMatch = /\/events\/(\d+)\//.exec(reply.seatmap_url || "");
+  const eventId = idMatch ? Number(idMatch[1]) : null;
+  const qs = new URLSearchParams((reply.seatmap_url || "").split("?")[1] || "");
+  const category = reply.quote?.category || qs.get("category") || "";
+  const quantity = reply.quote?.quantity || 1;
+
+  const [data, setData] = useState<SeatMapData | null>(null);
+  const [layout, setLayout] = useState<VenueLayout | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (eventId == null || !category) {
+      setError("Seat map unavailable");
+      return;
+    }
+    let alive = true;
+    Promise.all([venue(eventId), seats(eventId, category)])
+      .then(([v, s]) => {
+        if (alive) {
+          setLayout(v);
+          setData(s);
+        }
+      })
+      .catch((e) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [eventId, category]);
+
+  function toggle(id: string, status: string) {
+    if (frozen || status !== "available") return;
+    setSelected((cur) => {
+      if (cur.includes(id)) return cur.filter((s) => s !== id);
+      if (cur.length >= quantity) return [...cur.slice(1), id]; // rotate out oldest
+      return [...cur, id];
+    });
+  }
+
+  const ready = selected.length === quantity;
+  const seatClass = (status: string, isSel: boolean) =>
+    isSel
+      ? "bg-brand border-white text-white shadow-[0_0_0_2px_rgba(255,255,255,.25)] -translate-y-0.5"
+      : status === "available"
+        ? "bg-[#2ea043] border-transparent text-white hover:-translate-y-0.5"
+        : status === "held"
+          ? "bg-[#d29922] border-transparent text-white/90 cursor-not-allowed"
+          : "bg-[#5b5b6b] border-transparent text-white/60 cursor-not-allowed opacity-70";
+
+  return (
+    <div
+      className={`relative flex flex-col gap-2 rounded-xl border border-line bg-surface2 p-3 ${frozen ? "opacity-50 saturate-50" : ""}`}
+    >
+      {frozen && (
+        <span className="absolute right-2 top-2 z-10 rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-bold text-muted">
+          ✓ locked
+        </span>
+      )}
+      <div className="mx-auto w-3/4 rounded-b-[60%] border-t-2 border-brand-purple bg-gradient-to-b from-brand-purple/30 to-transparent py-0.5 text-center text-[10px] tracking-[0.35em] text-muted">
+        STAGE
+      </div>
+      <div className="text-center text-sm font-semibold">
+        Pick {quantity} {category} seat{quantity > 1 ? "s" : ""} — tap a section to change
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {error && <p className="text-xs text-muted">{error} — type seat IDs to continue.</p>}
+        {!layout && !error && <p className="text-xs text-muted">Loading venue…</p>}
+        {layout?.sections.map((sec) => {
+          const accent = CAT_ACCENT[sec.category] || "#8888aa";
+          const isActive = sec.category === category;
+          if (isActive) {
+            return (
+              <div
+                key={sec.category}
+                className="rounded-md border border-brand-purple bg-surface p-2"
+                style={{ borderLeft: `4px solid ${accent}` }}
+              >
+                <SectionLabel sec={sec} accent={accent} active />
+                <div className="mt-1.5 flex flex-col items-center gap-1 overflow-x-auto">
+                  {!data && <span className="text-[11px] text-muted">Loading seats…</span>}
+                  {data?.rows.map((r) => (
+                    <div key={r.row} className="flex items-center gap-1">
+                      <span className="w-4 text-center text-[10px] font-bold text-muted">{r.row}</span>
+                      {r.seats.map((s) => {
+                        const isSel = selected.includes(s.id);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            title={`${s.id} · ${s.status}`}
+                            aria-label={`Seat ${s.id}, ${s.status}`}
+                            disabled={frozen || s.status !== "available"}
+                            onClick={() => toggle(s.id, s.status)}
+                            className={`h-6 w-6 shrink-0 rounded-[7px_7px_4px_4px] border text-[10px] font-bold transition ${seatClass(s.status, isSel)}`}
+                          >
+                            {s.number}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          return (
+            <button
+              key={sec.category}
+              type="button"
+              disabled={frozen || sec.available === 0}
+              onClick={() => onSend(sec.category)}
+              className="rounded-md border border-line bg-surface p-2 text-left transition hover:-translate-y-px hover:bg-surface2 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ borderLeft: `4px solid ${accent}` }}
+            >
+              <SectionLabel sec={sec} accent={accent} />
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-3 text-[11px] text-muted">
+        <Legend swatch="bg-[#2ea043]" label="available" />
+        <Legend swatch="bg-brand" label="selected" />
+        <Legend swatch="bg-[#d29922]" label="held" />
+        <Legend swatch="bg-[#5b5b6b]" label="sold" />
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold">
+          {selected.length} of {quantity} selected
+        </span>
+        <button
+          type="button"
+          disabled={frozen || !ready}
+          onClick={() => ready && !frozen && onSend(selected.join(", "))}
+          className="max-w-[65%] truncate rounded-md bg-brand px-3 py-2 text-xs font-bold text-white transition hover:-translate-y-px disabled:cursor-not-allowed disabled:translate-y-0 disabled:border disabled:border-line disabled:bg-surface disabled:opacity-40"
+        >
+          {ready ? `Hold ${selected.join(", ")} →` : `Select ${quantity - selected.length} more`}
+        </button>
+      </div>
+      <p className="text-center text-[11px] text-muted">
+        Tip: you can also type seat IDs (e.g. &ldquo;G3, G4&rdquo;) and send.
+      </p>
+    </div>
+  );
+}
+
+function SectionLabel({
+  sec,
+  accent,
+  active = false,
+}: {
+  sec: VenueLayout["sections"][number];
+  accent: string;
+  active?: boolean;
+}) {
+  const sold = sec.available === 0;
+  return (
+    <div className="flex flex-wrap items-baseline gap-2">
+      <span className="text-[13px] font-extrabold tracking-wide" style={{ color: accent }}>
+        {active ? "📍 " : ""}
+        {sec.category.toUpperCase()}
+      </span>
+      <span className="text-[11px] text-muted">
+        {sold
+          ? "sold out"
+          : `${sec.available} seats · from ${sec.price_from_sar}${active ? " · you're here" : " · tap to choose"}`}
+      </span>
+    </div>
+  );
+}
+
+function Legend({ swatch, label }: { swatch: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <i className={`inline-block h-[11px] w-[11px] rounded-[3px] ${swatch}`} />
+      {label}
+    </span>
   );
 }
 

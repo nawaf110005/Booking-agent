@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Tests / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.cache/
+
+# Type-check / lint
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project — local DB + generated artifacts
+booking.db
+booking.sqlite
+booking.sqlite3
+*.db-journal
+.env
+.env.local
+tickets/*.pdf
+seatmaps/*.png
+
+# Local run/debug logs (uvicorn redirect files, scratch dbs)
+/_*.out
+/_*.err
+/_*.log
+/_*.db
+
+# Agent / vector store
+.chroma/
+chroma_data/
+
+# Spec-kit agent folder (may contain creds — per spec-kit notice)
+.claude/.credentials*
+.claude/auth*
+
+# uv
+.python-version

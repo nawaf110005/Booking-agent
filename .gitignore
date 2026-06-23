@@ -65,3 +65,6 @@ chroma_data/
 
 # uv
 .python-version
+
+# Persisted chat sessions (runtime)
+.sessions/

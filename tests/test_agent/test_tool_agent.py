@@ -7,17 +7,14 @@ injected, so no network or key is needed.
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy.orm import Session
 
-from booking_agent.agent import handle
+from booking_agent.agent import handle, tool_agent
 from booking_agent.agent import observability as obs
 from booking_agent.agent import state as S
-from booking_agent.agent import tool_agent
 from booking_agent.agent.state import ConversationState
 from booking_agent.agent.tool_specs import dispatch
 from booking_agent.tools.payments import pay_booking
-
 
 # --- fake model helpers ---------------------------------------------------- #
 
@@ -131,11 +128,11 @@ def test_tool_calls_are_observable(seeded: Session) -> None:
     assert "search_events" in tools and "lookup_member" in tools
 
 
-def test_router_defaults_to_fsm(seeded: Session) -> None:
-    # Default mode routes to the deterministic FSM (policy.respond).
+def test_router_defaults_to_multi_agent(seeded: Session) -> None:
+    # Default mode routes to the orchestrator + specialist team (offline brain).
     st = ConversationState(session_id="ta-7")
     r = handle(seeded, st, "Coldplay in Riyadh")
-    assert r["step"] == S.NEED_EMAIL  # FSM behavior
+    assert r["step"] == S.NEED_EMAIL  # orchestrator resolved the event, asks for email
 
 
 def test_router_selects_tool_agent_when_configured(seeded: Session, monkeypatch) -> None:

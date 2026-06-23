@@ -670,22 +670,165 @@ footer strong { color: var(--text); }
   margin-top: .15rem;
 }
 
-/* seatmap */
-.seatmap-wrap {
+/* ── interactive seat map ─────────────────────────────────── */
+.seatmap {
   display: flex;
   flex-direction: column;
-  gap: .4rem;
-}
-.seatmap-wrap img {
-  width: 100%;
-  border-radius: var(--radius-sm);
+  gap: .55rem;
+  padding: .85rem .75rem .75rem;
+  background: var(--surface-2);
   border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
-.seatmap-caption {
-  font-size: .7rem;
+.seatmap__stage {
+  align-self: center;
+  width: 72%;
+  text-align: center;
+  font-size: .62rem;
+  letter-spacing: .35em;
+  color: var(--text-muted);
+  padding: .25rem 0;
+  border-radius: 0 0 60% 60% / 0 0 100% 100%;
+  background: linear-gradient(180deg, rgba(123,47,247,.28), transparent);
+  border-top: 2px solid var(--accent-to);
+}
+.seatmap__head {
+  font-size: .82rem;
+  font-weight: 700;
+  text-align: center;
+}
+.seatmap__grid {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  align-items: center;
+  overflow-x: auto;
+  padding: .25rem 0;
+  font-size: .75rem;
+  color: var(--text-muted);
+}
+.seat-row {
+  display: flex;
+  align-items: center;
+  gap: .28rem;
+}
+.seat-row__label {
+  width: 1.1rem;
+  flex: 0 0 auto;
+  font-size: .62rem;
+  font-weight: 700;
   color: var(--text-muted);
   text-align: center;
 }
+.seat {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 7px 7px 4px 4px;
+  font-size: .6rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: transform .08s ease, box-shadow .12s ease, background .12s ease;
+  background: #2ea043;            /* available — green */
+}
+.seat:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 3px 10px rgba(46,160,67,.5); }
+.seat:focus-visible { outline: 2px solid var(--accent-to); outline-offset: 2px; }
+.seat--held  { background: #d29922; cursor: not-allowed; }   /* amber */
+.seat--sold  { background: #5b5b6b; cursor: not-allowed; opacity: .65; }  /* grey */
+.seat--selected {
+  background: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.25), 0 4px 12px rgba(230,0,126,.55);
+  transform: translateY(-2px);
+}
+.seat:disabled { cursor: not-allowed; }
+
+.seatmap__legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .65rem;
+  font-size: .66rem;
+  color: var(--text-muted);
+}
+.seatmap__legend span { display: inline-flex; align-items: center; gap: .3rem; }
+.seat-dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.seat-dot--avail { background: #2ea043; }
+.seat-dot--sel   { background: linear-gradient(135deg, var(--accent-from), var(--accent-to)); }
+.seat-dot--held  { background: #d29922; }
+.seat-dot--sold  { background: #5b5b6b; }
+
+.seatmap__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.seatmap__counter { font-size: .74rem; font-weight: 700; color: var(--text); }
+.seatmap__confirm {
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: .5rem .9rem;
+  font-size: .78rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+  transition: opacity .15s ease, transform .08s ease;
+  max-width: 65%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seatmap__confirm:hover:not(:disabled) { transform: translateY(-1px); }
+.seatmap__confirm:disabled { opacity: .4; cursor: not-allowed; background: var(--surface); border: 1px solid var(--border); }
+.seatmap__hint { font-size: .68rem; color: var(--text-muted); text-align: center; }
+
+/* ── venue layout: sections stacked by distance from the stage ───────────── */
+.venue { display: flex; flex-direction: column; gap: .4rem; }
+.venue-section {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--vs-accent, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: .5rem .6rem;
+  color: var(--text);
+  font: inherit;
+}
+button.venue-section { cursor: pointer; width: 100%; transition: background .12s ease, transform .08s ease; }
+button.venue-section:hover:not(:disabled) { background: var(--surface-2); transform: translateY(-1px); }
+button.venue-section:disabled { opacity: .5; cursor: not-allowed; }
+.venue-section--active { background: var(--surface-2); border-color: var(--vs-accent, var(--accent-to)); }
+/* per-category accent colour on the left rail + dot */
+.venue-section--vip      { --vs-accent: #ffd166; }
+.venue-section--gold     { --vs-accent: #f4a62a; }
+.venue-section--silver   { --vs-accent: #c9d1d9; }
+.venue-section--standing { --vs-accent: #6ee7b7; }
+.venue-section__label { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.venue-section__name {
+  font-size: .76rem; font-weight: 800; letter-spacing: .04em;
+  color: var(--vs-accent, var(--text));
+}
+.venue-section__meta { font-size: .68rem; color: var(--text-muted); }
+.venue-section--active .seatmap__grid { margin-top: .45rem; }
+/* "you are here" pin on the active section */
+.venue-section--active .venue-section__name::before { content: "📍 "; }
+
+/* A used/superseded seat map is frozen so the user can't keep picking on it. */
+.seatmap--done { opacity: .5; position: relative; filter: saturate(.6); }
+.seatmap--done::after {
+  content: "✓ locked";
+  position: absolute; top: 8px; right: 10px;
+  font-size: .6rem; font-weight: 700; color: var(--text-muted);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: .12rem .5rem;
+}
+.seatmap--done .seat,
+.seatmap--done .venue-section,
+.seatmap--done .seatmap__confirm { pointer-events: none; }
 
 /* hold countdown */
 .hold-card {
