@@ -1,4 +1,4 @@
-"""Centralized safety guardrails (bootcamp Week 6: *Guardrails and Safety*).
+"""Centralized safety guardrails.
 
 Pure, dependency-light predicates that the agent enforces. Keeping them in one
 module makes the safety rules (a) unit-testable in isolation and (b) auditable in

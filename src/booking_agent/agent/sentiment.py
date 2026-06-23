@@ -1,4 +1,4 @@
-"""Per-turn sentiment classification (FR-012; Week 6 — adapt on frustration).
+"""Per-turn sentiment classification (adapt on frustration).
 
 Rule-based and dependency-free so it runs offline and is deterministic in tests;
 the agent consumes it every turn, stores it in session memory, and logs it to the

@@ -5,8 +5,7 @@ call raises and nothing changes. Holds carry a 10-minute TTL; expired holds are
 swept lazily on read/hold and explicitly by `release_expired_holds`.
 
 Concurrency: on SQLite (single writer) the surrounding transaction serialises
-holds. On PostgreSQL, wrap the seat reads in `SELECT ... FOR UPDATE` (left as a
-documented upgrade in plan.md Phase 0).
+holds. On PostgreSQL, wrap the seat reads in `SELECT ... FOR UPDATE`.
 """
 
 from __future__ import annotations
@@ -195,7 +194,7 @@ def release_seat_hold(session: Session, token: str) -> int:
 def release_expired_holds(session: Session, now: datetime | None = None) -> int:
     """Sweep ALL events: release holds past their TTL. Returns count released.
 
-    Intended to be called periodically by a background worker (F002/F004).
+    Intended to be called periodically by a background worker (also the `booking-agent sweep` CLI).
     """
 
     now = now or utcnow()

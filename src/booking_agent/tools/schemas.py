@@ -114,7 +114,7 @@ class HoldResult(_DTO):
     ttl_minutes: int
 
 
-# -- Bookings (schema shared with F003) --------------------------------------
+# -- Bookings ----------------------------------------------------------------
 
 
 class BookingOut(_DTO):

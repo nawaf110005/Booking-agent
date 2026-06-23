@@ -1,7 +1,6 @@
-"""Tool-calling agent mode — the model drives the tools (Week 4: *Reason–Act–
-Observe Loop*; Week 5: *Loop Prevention*).
+"""Tool-calling agent mode — the model drives the tools.
 
-This is the genuinely "agentic" path: instead of a hardcoded state machine, the
+This is the genuinely "agentic" path: the
 LLM decides which tool to call each step, we execute it (`tool_specs.dispatch`),
 feed the result back, and repeat until the model answers or a step cap trips
 (loop prevention). The dangerous action — creating the booking / payment — is

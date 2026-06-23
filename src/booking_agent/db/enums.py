@@ -54,14 +54,14 @@ class MemberTier(str, Enum):
 
 
 class Sentiment(str, Enum):
-    """Per-turn classification used by the personalisation/sentiment slice (F006)."""
+    """Per-turn sentiment classification used by the personalisation layer."""
 
     ENGAGED = "engaged"
     NEUTRAL = "neutral"
     FRUSTRATED = "frustrated"
 
 
-# --- Membership economics (Requirements.md §10) -----------------------------
+# --- Membership economics ---------------------------------------------------
 # Discounts are integer basis points (1500 = 15%) so all money math stays exact.
 
 NON_MEMBER_CAP = 4

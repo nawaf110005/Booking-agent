@@ -1,5 +1,4 @@
-"""Role-based specialist agents (Week 5: *Role-Based Agents*, *Multi-Agent
-Orchestration*).
+"""Role-based specialist agents.
 
 The booking task is decomposed across four narrow specialists, each an LLM
 tool-calling loop restricted to *only* the tools for its role. The orchestrator
@@ -23,7 +22,7 @@ from booking_agent.agent import state as S
 from booking_agent.agent.state import ConversationState
 from booking_agent.agent.tool_specs import TOOL_SCHEMAS, dispatch
 
-# Loop-prevention cap on tool round-trips within a single specialist (Week 5).
+# Loop-prevention cap on tool round-trips within a single specialist.
 MAX_SPECIALIST_STEPS = 4
 
 _BASE = (
@@ -51,8 +50,6 @@ CATALOG = Specialist("catalog", "catalog/search", ("search_events", "select_even
 MEMBERSHIP = Specialist("membership", "membership", ("lookup_member",))
 PRICING = Specialist("pricing", "pricing", ("list_categories", "quote_price"))
 SEATING = Specialist("seating", "seating", ("hold_seats",))
-
-ROSTER = (CATALOG, MEMBERSHIP, PRICING, SEATING)
 
 
 def _schemas_for(names: tuple[str, ...]) -> list[dict]:
