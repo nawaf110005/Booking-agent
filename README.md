@@ -1,4 +1,4 @@
-# Tazkara (Booking-Agent)
+# Tazkra (Booking-Agent)
 
 Tazkara is a chat-first conversational ticket booking agent for live events in Saudi Arabia. It collapses the entire booking funnel—event search, membership verification, price quoting, visual seat selection, payment processing, and ticket generation—into a single chat interface.
 
@@ -31,7 +31,7 @@ You can launch both the backend and Next.js frontend with a single command:
 ```
 *(On Windows, use `.\run.ps1 full`)*
 
-Once started, open your browser and navigate to **http://localhost:3000** (or http://localhost:3001).
+Once started, open your browser and navigate to **http://localhost:3000**.
 
 ### Manual Setup
 
