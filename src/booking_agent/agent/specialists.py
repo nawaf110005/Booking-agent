@@ -57,16 +57,6 @@ def _schemas_for(names: tuple[str, ...]) -> list[dict]:
     return [t for t in TOOL_SCHEMAS if t["function"]["name"] in wanted]
 
 
-def _state_summary(state: ConversationState) -> str:
-    # Privacy: first name + whether an email is known, never the address itself.
-    return (
-        f"name={state.name or 'unknown'}, event_selected={bool(state.event_id)}, "
-        f"email_known={bool(state.email)}, member_tier={state.tier or 'none'}, "
-        f"ticket_cap={state.ticket_cap}, category={state.category}, "
-        f"quantity={state.quantity}, seats_held={bool(state.hold_token)}, step={state.step}"
-    )
-
-
 def run_specialist(
     db: Session,
     state: ConversationState,
@@ -86,7 +76,7 @@ def run_specialist(
     tools = _schemas_for(specialist.tools)
     messages: list[dict] = [
         {"role": "system", "content": specialist.system_prompt},
-        {"role": "system", "content": "Current booking state: " + _state_summary(state)},
+        {"role": "system", "content": "Current booking state: " + S.state_summary(state)},
         {"role": "user", "content": message},
     ]
     executed: list[dict] = []
